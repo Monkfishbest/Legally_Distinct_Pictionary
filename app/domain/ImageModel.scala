@@ -12,6 +12,7 @@ final case class TurnImage(
 final case class GalleryItem(
     gameId: String,
     turnNumber: Int,
+    artistName: String,
     answer: Option[String],
     difficulty: Option[WordDifficulty],
     storageKey: String,

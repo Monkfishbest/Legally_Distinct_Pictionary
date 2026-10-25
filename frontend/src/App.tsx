@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createRoom, getGallery, joinRoom, uploadFinishedImage } from './api'
+import { createCustomWord, createRoom, getGallery, joinRoom, uploadFinishedImage } from './api'
 import { CanvasBoard } from './CanvasBoard'
 import { useGameSocket } from './useGameSocket'
 import type { Difficulty, GalleryItem, Room } from './types'
@@ -20,25 +20,38 @@ export default function App() {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'create' | 'join'>('create')
+  const [turnDurationSeconds, setTurnDurationSeconds] = useState(60)
+  const [turnsPerPlayer, setTurnsPerPlayer] = useState(1)
+  const [customRoomCode, setCustomRoomCode] = useState('')
+  const [customWord, setCustomWord] = useState('')
+  const [customDifficulty, setCustomDifficulty] = useState<Difficulty>('Simple')
+  const [customMessage, setCustomMessage] = useState<string | null>(null)
 
   const enter = async () => {
     try {
       setError(null)
-      setRoom(mode === 'create' ? await createRoom(name) : await joinRoom(code, name))
+      setRoom(mode === 'create' ? await createRoom(name, { turnDurationSeconds, turnsPerPlayer }) : await joinRoom(code, name))
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not join room') }
   }
 
+  const submitHomeWord = async () => {
+    try { await createCustomWord(customRoomCode, customWord, customDifficulty); setCustomWord(''); setCustomMessage('Custom word added to the room.') }
+    catch (caught) { setCustomMessage(caught instanceof Error ? caught.message : 'Could not add custom word') }
+  }
+
   if (!room) return <main className="shell landing">
-    <div className="brand">QUICK<span>DRAW</span></div>
+    <div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div>
     <p className="eyebrow">CLASSIC MODE</p>
     <h1>Make the room.<br /><em>Make the picture.</em></h1>
     <div className="entry-card">
       <div className="tabs"><button className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}>Create room</button><button className={mode === 'join' ? 'active' : ''} onClick={() => setMode('join')}>Join room</button></div>
       <label>Your name<input value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Alex" maxLength={30} /></label>
       {mode === 'join' && <label>Room code<input value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="ABC123" maxLength={6} /></label>}
+      {mode === 'create' && <div className="host-settings"><label>Seconds per round<input type="number" min={10} max={600} value={turnDurationSeconds} onChange={event => setTurnDurationSeconds(Number(event.target.value))} /></label><label>Rounds per player<input type="number" min={1} max={20} value={turnsPerPlayer} onChange={event => setTurnsPerPlayer(Number(event.target.value))} /></label></div>}
       <button className="primary" onClick={enter} disabled={!name.trim() || (mode === 'join' && code.length !== 6)}>{mode === 'create' ? 'Create room' : 'Join room'} <span>→</span></button>
       {error && <p className="error">{error}</p>}
     </div>
+    <div className="home-custom-words"><p className="eyebrow">SUBMIT A CUSTOM WORD</p><p>Add a word to an existing room before the game starts.</p><div><input value={customRoomCode} onChange={event => setCustomRoomCode(event.target.value.toUpperCase())} placeholder="ROOM CODE" maxLength={6} /><input value={customWord} onChange={event => setCustomWord(event.target.value)} placeholder="Custom word" maxLength={100} /><select value={customDifficulty} onChange={event => setCustomDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={customRoomCode.length !== 6 || !customWord.trim()} onClick={submitHomeWord}>Add word</button></div>{customMessage && <small>{customMessage}</small>}</div>
   </main>
 
   return <GameRoom room={room} onError={setError} />
@@ -82,7 +95,7 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
   if (finished && game) return <Gallery gameId={game.id} items={gallery} />
 
   return <main className="shell game-shell">
-    <header className="topbar"><div className="brand">QUICK<span>DRAW</span></div><div className="room-pill">ROOM <strong>{room.code}</strong><button onClick={() => navigator.clipboard?.writeText(room.code)}>copy</button></div>{timeLeft !== null && <div className={`round-timer ${timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><strong>{formatTime(timeLeft)}</strong></div>}<div className="phone-qr"><QRCodeSVG value={phoneUrl} size={54} /><span>SCAN FOR PHONE</span></div><div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
+    <header className="topbar"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><div className="room-pill">ROOM <strong>{room.code}</strong><button onClick={() => navigator.clipboard?.writeText(room.code)}>copy</button></div>{timeLeft !== null && <div className={`round-timer ${timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><strong>{formatTime(timeLeft)}</strong></div>}<div className="phone-qr"><QRCodeSVG value={phoneUrl} size={54} /><span>SCAN FOR PHONE</span></div><div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
     <section className="game-layout">
       <aside className="sidebar"><div className="score-head"><span>PLAYERS</span><span>SCORE</span></div>{players.map(player => <div className={`player-row ${player.id === game?.artistId ? 'artist' : ''}`} key={player.id}><span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span><span>{player.name}{player.id === room.currentPlayerId && <small> YOU</small>}{player.id === game?.artistId && <b>✎</b>}</span><strong>{player.score}</strong></div>)}<div className="sidebar-bottom"><p>TURN</p><strong>{game?.turnNumber ?? 0}</strong><span>/ {room.settings.turnsPerPlayer * players.length}</span></div></aside>
       <section className="board-area">
@@ -100,7 +113,14 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
 }
 
 function Lobby({ room, isOwner, phoneUrl, onStart }: { room: Room; isOwner: boolean; phoneUrl: string; onStart: () => void }) {
-  return <div className="lobby"><div className="lobby-icon">✦</div><h3>Invite your people</h3><p>Share the room code, then scan the QR code on the painter’s phone.</p><div className="big-code">{room.code}</div><div className="qr-card"><QRCodeSVG value={phoneUrl} size={124} bgColor="#fffdf8" fgColor="#10131c" /><small>SCAN TO CONTROL THE GAME</small></div><button className="primary" disabled={!isOwner || room.players.length < 2} onClick={onStart}>{room.players.length < 2 ? 'Waiting for players...' : 'Start game →'}</button></div>
+  const [word, setWord] = useState('')
+  const [difficulty, setDifficulty] = useState<Difficulty>('Simple')
+  const [wordMessage, setWordMessage] = useState<string | null>(null)
+  const submitWord = async () => {
+    try { await createCustomWord(room.code, word, difficulty); setWord(''); setWordMessage('Custom word added to this room.') }
+    catch (error) { setWordMessage(error instanceof Error ? error.message : 'Could not add custom word') }
+  }
+  return <div className="lobby"><div className="lobby-icon">✦</div><h3>Invite your people</h3><p>Share the room code, then scan the QR code on the painter’s phone.</p><div className="big-code">{room.code}</div><div className="qr-card"><QRCodeSVG value={phoneUrl} size={124} bgColor="#fffdf8" fgColor="#10131c" /><small>SCAN TO CONTROL THE GAME</small></div><button className="primary" disabled={!isOwner || room.players.length < 2} onClick={onStart}>{room.players.length < 2 ? 'Waiting for players...' : 'Start game →'}</button><div className="custom-word-form"><p className="eyebrow">ADD A CUSTOM WORD</p><input value={word} onChange={event => setWord(event.target.value)} placeholder="e.g. family inside joke" maxLength={100} /><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!word.trim()} onClick={submitWord}>Add word</button>{wordMessage && <small>{wordMessage}</small>}</div></div>
 }
 
 function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: string }) {
@@ -170,8 +190,8 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
   if (game?.phase === 'Complete') return <Gallery gameId={game.id} items={gallery} />
 
   return <main className="shell phone-shell">
-    <header className="topbar"><div className="brand">QUICK<span>DRAW</span></div><div className="room-pill">ROOM <strong>{roomCode}</strong></div><div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
-    <section className="phone-panel"><p className="eyebrow">PHONE CONTROLLER</p><h1>{phaseTitle(phase, isArtist)}</h1>{socket.word && isArtist && <div className="phone-word"><small>{socket.wordDifficulty ?? 'SELECTED'} →</small><strong>{socket.word}</strong><span>Keep it secret.</span></div>}
+    <header className="topbar"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><div className="room-pill">ROOM <strong>{roomCode}</strong></div><div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
+    <section className="phone-panel">{phaseTitle(phase, isArtist) && <h1>{phaseTitle(phase, isArtist)}</h1>}{socket.word && isArtist && <div className="phone-word"><small>{socket.wordDifficulty ?? 'SELECTED'} →</small><strong>{socket.word}</strong><span>Keep it secret.</span></div>}
       {phase === 'Lobby' && <div className="phone-wait">Waiting for the host to start the game.</div>}
       {phase === 'WordSelection' && <DifficultyPicker isArtist={isArtist} options={socket.wordOptions} onChoose={(difficulty, wordId) => send('turn.choose_difficulty', { difficulty, wordId })} />}
       {showWordBriefing && <WordBriefing difficulty={socket.wordDifficulty} word={socket.word!} onStart={() => setReadyToDraw(true)} />}
@@ -222,14 +242,14 @@ function playRevealSound(correct: boolean) {
 }
 
 function Gallery({ gameId, items }: { gameId: string; items: GalleryItem[] }) {
-  return <main className="shell gallery-page"><div className="brand">QUICK<span>DRAW</span></div><p className="eyebrow">GAME COMPLETE</p><h1>The gallery</h1><p className="gallery-subtitle">A little evidence of what happened here.</p><div className="gallery-strip">{items.map(item => <figure key={item.turnNumber}><img src={item.imageUrl} alt={`Turn ${item.turnNumber}`} /><figcaption><small>TURN {item.turnNumber} · {item.difficulty}</small><strong>{item.answer ?? 'Unknown word'}</strong></figcaption></figure>)}{!items.length && <p>No finished drawings were uploaded.</p>}</div><button className="secondary" onClick={() => window.location.reload()}>Play again</button><span className="gallery-id">{gameId}</span></main>
+  return <main className="shell gallery-page"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><p className="eyebrow">GAME COMPLETE</p><h1>The gallery</h1><p className="gallery-subtitle">A little evidence of what happened here.</p><div className="gallery-strip">{items.map(item => <figure key={item.turnNumber}><img src={item.imageUrl} alt={`Turn ${item.turnNumber}`} /><figcaption><small>TURN {item.turnNumber} · {item.difficulty}</small><strong>{item.answer ?? 'Unknown word'}</strong><span>Drawn by {item.artistName}</span></figcaption></figure>)}{!items.length && <p>No finished drawings were uploaded.</p>}</div><button className="secondary" onClick={() => window.location.reload()}>Play again</button><span className="gallery-id">{gameId}</span></main>
 }
 
 function phaseTitle(phase: string, isArtist: boolean) {
   if (phase === 'Lobby') return 'Ready when you are.'
   if (phase === 'WordSelection') return isArtist ? 'Pick your difficulty.' : 'The artist is choosing.'
   if (phase === 'TurnComplete') return 'Turn complete.'
-  return isArtist ? 'Draw it. Don’t say it.' : 'What is it?'
+  return isArtist ? '' : 'What is it?'
 }
 
 function formatTime(seconds: number) {

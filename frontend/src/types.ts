@@ -52,6 +52,7 @@ export interface DrawingOperation {
 export interface GalleryItem {
   gameId: string
   turnNumber: number
+  artistName: string
   answer: string | null
   difficulty: Difficulty | null
   imageUrl: string

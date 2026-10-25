@@ -89,9 +89,10 @@ final class JdbcTurnImageRepository @Inject() (configuration: Configuration) ext
       using(connection()) { connection =>
         using(connection.prepareStatement(
           """
-            |SELECT i.game_id, i.turn_number, w.display_text, t.difficulty, i.storage_key, i.mime_type
+            |SELECT i.game_id, i.turn_number, p.name, w.display_text, t.difficulty, i.storage_key, i.mime_type
             |FROM turn_images i
             |JOIN turns t ON t.game_id = i.game_id AND t.turn_number = i.turn_number
+            |JOIN room_players p ON p.id = t.artist_player_id
             |LEFT JOIN words w ON w.id = i.word_id
             |WHERE i.game_id = ?
             |ORDER BY i.turn_number
@@ -103,6 +104,7 @@ final class JdbcTurnImageRepository @Inject() (configuration: Configuration) ext
               GalleryItem(
                 row.getString("game_id"),
                 row.getInt("turn_number"),
+                row.getString("name"),
                 Option(row.getString("display_text")),
                 Option(row.getString("difficulty")).flatMap(value => WordDifficulty.values.find(_.toString == value)),
                 row.getString("storage_key"),

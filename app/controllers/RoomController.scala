@@ -8,7 +8,7 @@ import services.RoomService
 
 import javax.inject.*
 
-final case class PlayerRequest(name: String)
+final case class PlayerRequest(name: String, turnDurationSeconds: Option[Int] = None, turnsPerPlayer: Option[Int] = None)
 
 object PlayerRequest:
   given Reads[PlayerRequest] = Json.reads[PlayerRequest]
@@ -24,7 +24,11 @@ final class RoomController @Inject() (
     request.body.validate[PlayerRequest].fold(
       errors => BadRequest(Json.obj("error" -> JsError.toJson(errors))),
       playerRequest =>
-        roomService.create(playerRequest.name) match
+        val settings = GameSettings(
+          playerRequest.turnDurationSeconds.getOrElse(GameSettings().turnDurationSeconds),
+          playerRequest.turnsPerPlayer.getOrElse(GameSettings().turnsPerPlayer)
+        )
+        roomService.create(playerRequest.name, settings) match
           case Right((room, player)) => Created(roomJson(room, Some(player.id)))
           case Left(GameError.PlayerNameRequired) => BadRequest(Json.obj("error" -> "Player name must be 1-30 characters"))
           case Left(_) => InternalServerError(Json.obj("error" -> "Could not create room"))

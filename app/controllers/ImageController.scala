@@ -40,6 +40,7 @@ final class ImageController @Inject() (
           Json.obj(
             "gameId" -> item.gameId,
             "turnNumber" -> item.turnNumber,
+                    "artistName" -> item.artistName,
             "answer" -> item.answer,
             "difficulty" -> item.difficulty.map(_.toString),
             "imageUrl" -> s"/api/games/${item.gameId}/turns/${item.turnNumber}/image"

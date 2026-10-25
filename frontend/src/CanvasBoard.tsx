@@ -36,7 +36,11 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
     const context = element.getContext('2d')!
     context.fillStyle = '#fffdf8'
     context.fillRect(0, 0, element.width, element.height)
-    for (const operation of operations) {
+    const renderedOperations = operations.reduce<DrawingOperation[]>((result, operation) => {
+      if (operation.operationType === 'Undo') return result.slice(0, -1)
+      return [...result, operation]
+    }, [])
+    for (const operation of renderedOperations) {
       if (operation.operationType === 'Fill') {
         context.fillStyle = operation.color
         context.fillRect(0, 0, element.width, element.height)

@@ -33,14 +33,16 @@ final class RoomService @Inject() (
           drawings.put(gameId, operations)
           operations.lastOption.foreach(operation => drawingSequences.put(gameId, operation.sequence))
 
-  def create(playerName: String): Either[GameError, (Room, Player)] =
+  def create(playerName: String, settings: GameSettings = GameSettings()): Either[GameError, (Room, Player)] =
     validPlayerName(playerName).flatMap { name =>
-      val player = Player(UUID.randomUUID().toString, name)
-      val room = Room(generateCode(), player.id, Vector(player))
-      gamePersistence.saveRoom(room).map { _ =>
-        rooms.put(room.code, room)
-        (room, player)
-      }
+      if settings.turnDurationSeconds <= 0 || settings.turnsPerPlayer <= 0 then Left(GameError.InvalidSettings)
+      else
+        val player = Player(UUID.randomUUID().toString, name)
+        val room = Room(generateCode(), player.id, Vector(player), settings)
+        gamePersistence.saveRoom(room).map { _ =>
+          rooms.put(room.code, room)
+          (room, player)
+        }
     }
 
   def join(code: String, playerName: String): Either[GameError, (Room, Player)] =

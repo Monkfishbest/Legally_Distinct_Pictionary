@@ -196,7 +196,7 @@ function DrawingControls({ canDraw, color, width, setColor, setWidth, onAction }
 }
 
 function TurnActions({ isArtist, forceSelection, players, confirmed, artistId, onOpenSelection, onConfirm, onEnd }: { isArtist: boolean; forceSelection: boolean; players: { id: string; name: string }[]; confirmed: string[]; artistId: string; onOpenSelection?: () => void; onConfirm: (id: string) => void; onEnd: () => void }) {
-  if (isArtist && !forceSelection) return <div className="turn-actions"><button className="primary" onClick={onOpenSelection}>Someone guessed it</button><button className="secondary" onClick={onEnd}>End turn</button></div>
+  if (isArtist && !forceSelection) return <div className="turn-actions"><button className="primary" onClick={onOpenSelection}>Someone guessed it</button></div>
   if (isArtist) return <div className="guess-screen"><p>{forceSelection ? 'Time is up. Who guessed correctly?' : 'Who guessed correctly?'}</p>{players.filter(player => player.id !== artistId && !confirmed.includes(player.id)).map(player => <button key={player.id} onClick={() => onConfirm(player.id)}>{player.name}</button>)}<button className="secondary" onClick={onEnd}>No one guessed it / End turn</button></div>
   return <div className="waiting-note">The artist controls guesses and the end of this turn.</div>
 }

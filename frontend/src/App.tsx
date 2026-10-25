@@ -90,7 +90,7 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
   const phase = game?.phase ?? 'Lobby'
   const players = game?.players ?? currentRoom.players
   const finished = phase === 'Complete'
-  const phoneUrl = `${publicOrigin}/?phone=1&room=${encodeURIComponent(room.code)}&playerId=${encodeURIComponent(room.currentPlayerId ?? '')}`
+  const phoneUrl = `${publicOrigin}/?phone=1&room=${encodeURIComponent(room.code)}&playerId=${encodeURIComponent(game?.artistId ?? room.currentPlayerId ?? '')}`
 
   if (finished && game) return <Gallery gameId={game.id} items={gallery} />
 

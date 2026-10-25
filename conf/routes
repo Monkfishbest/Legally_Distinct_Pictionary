@@ -1,0 +1,11 @@
+# Health and readiness endpoint for local development and container health checks.
+GET     /health        controllers.HealthController.health
+GET     /api/rooms/:roomId/words/:difficulty        controllers.WordController.list(roomId: String, difficulty: String)
+POST    /api/rooms/:roomId/words                    controllers.WordController.create(roomId: String)
+POST    /api/rooms                                  controllers.RoomController.create
+GET     /api/rooms/:code                            controllers.RoomController.get(code: String)
+POST    /api/rooms/:code/join                       controllers.RoomController.join(code: String)
+GET     /api/rooms/:code/ws                         controllers.RoomWebSocketController.connect(code: String)
+POST    /api/games/:gameId/turns/:turnNumber/image controllers.ImageController.upload(gameId: String, turnNumber: Int)
+GET     /api/games/:gameId/gallery                  controllers.ImageController.gallery(gameId: String)
+GET     /api/games/:gameId/turns/:turnNumber/image  controllers.ImageController.image(gameId: String, turnNumber: Int)

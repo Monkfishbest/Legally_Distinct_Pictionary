@@ -1,0 +1,28 @@
+.tools/
+.env
+.env.*
+!.env.example
+.sbt
+.bloop/
+target/
+project/target/
+project/project/
+.bsp/
+.metals/
+.idea/
+.vscode/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+*.log
+
+# Runtime data and local development output
+media/
+data/
+uploads/
+*.sqlite
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db

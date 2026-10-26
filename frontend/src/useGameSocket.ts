@@ -3,6 +3,7 @@ import type { Difficulty, DrawingOperation, GameState, Room, ServerEvent, TurnRe
 
 export function useGameSocket(roomCode: string | null, playerId: string | null) {
   const socket = useRef<WebSocket | null>(null)
+  const pendingMessages = useRef<string[]>([])
   const [connected, setConnected] = useState(false)
   const [game, setGame] = useState<GameState | null>(null)
   const [room, setRoom] = useState<Partial<Room> | null>(null)
@@ -25,38 +26,70 @@ export function useGameSocket(roomCode: string | null, playerId: string | null) 
     const configuredWsUrl = (import.meta.env.VITE_WS_URL ?? '').replace(/\/$/, '')
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const wsOrigin = configuredWsUrl || `${protocol}://${window.location.host}`
-    const ws = new WebSocket(`${wsOrigin}/api/rooms/${roomCode}/ws?playerId=${playerId}`)
-    socket.current = ws
-    ws.onopen = () => { setConnected(true); setError(null) }
-    ws.onclose = () => setConnected(false)
-    ws.onerror = () => setError('WebSocket connection failed')
-    ws.onmessage = (message) => {
-      const event = JSON.parse(message.data) as ServerEvent
-      if (event.type === 'room.state') setRoom(event.room)
-      if (event.type === 'game.state') {
-        setGame(event.state)
-        if (event.state.phase === 'WordSelection') {
-          setWord(null)
-          setWordDifficulty(null)
-          setReveal(null)
-          setWordOptions([])
-          setCountdown(null)
+    let stopped = false
+    let retryAttempt = 0
+    let retryTimer: number | null = null
+
+    const connect = () => {
+      if (stopped) return
+      const ws = new WebSocket(`${wsOrigin}/api/rooms/${roomCode}/ws?playerId=${playerId}`)
+      socket.current = ws
+      ws.onopen = () => {
+        retryAttempt = 0
+        setConnected(true)
+        setError(null)
+        for (const pending of pendingMessages.current.splice(0)) ws.send(pending)
+      }
+      ws.onclose = () => {
+        if (socket.current === ws) socket.current = null
+        setConnected(false)
+        if (!stopped) {
+          setError('Connection interrupted. Reconnecting...')
+          const delay = Math.min(1000 * 2 ** retryAttempt, 10000)
+          retryAttempt += 1
+          retryTimer = window.setTimeout(connect, delay)
         }
       }
-      if (event.type === 'drawing.snapshot') setOperations(event.operations)
-      if (event.type === 'drawing.operation') setOperations(current => [...current, event.operation])
-      if (event.type === 'turn.word_assigned') { setWord(event.word); setWordDifficulty(event.difficulty) }
-      if (event.type === 'turn.countdown') setCountdown(event.seconds > 0 ? event.seconds : null)
-      if (event.type === 'turn.word_options') setWordOptions(event.options)
-      if (event.type === 'turn.reveal') setReveal(event)
-      if (event.type === 'error') setError(event.error)
+      ws.onerror = () => setError('Connection interrupted. Reconnecting...')
+      ws.onmessage = (message) => {
+        const event = JSON.parse(message.data) as ServerEvent
+        if (event.type === 'room.state') setRoom(event.room)
+        if (event.type === 'game.state') {
+          setGame(event.state)
+          if (event.state.phase === 'WordSelection') {
+            setWord(null)
+            setWordDifficulty(null)
+            setReveal(null)
+            setWordOptions([])
+            setCountdown(null)
+          }
+        }
+        if (event.type === 'drawing.snapshot') setOperations(event.operations)
+        if (event.type === 'drawing.operation') setOperations(current => [...current, event.operation])
+        if (event.type === 'turn.word_assigned') { setWord(event.word); setWordDifficulty(event.difficulty) }
+        if (event.type === 'turn.countdown') setCountdown(event.seconds > 0 ? event.seconds : null)
+        if (event.type === 'turn.word_options') setWordOptions(event.options)
+        if (event.type === 'turn.reveal') setReveal(event)
+        if (event.type === 'error') setError(event.error)
+      }
     }
-    return () => { ws.close(); socket.current = null; setConnected(false) }
+    connect()
+    return () => {
+      stopped = true
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      socket.current?.close()
+      socket.current = null
+      setConnected(false)
+    }
   }, [roomCode, playerId])
 
   const send = useCallback((payload: object) => {
-    if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(payload))
-    else setError('Not connected to the game')
+    const message = JSON.stringify(payload)
+    if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(message)
+    else {
+      pendingMessages.current = [...pendingMessages.current.slice(-19), message]
+      setError('Connection interrupted. Reconnecting...')
+    }
   }, [])
 
   return { connected, room, game, operations, word, wordDifficulty, wordOptions, countdown, reveal, error, setError, send }

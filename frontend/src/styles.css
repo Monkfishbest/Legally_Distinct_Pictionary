@@ -88,8 +88,11 @@ input:focus { border-color: #ff6565; }
 .game-shell.landing label { color: #e4f3ff; }
 .game-shell.landing input, .game-shell.landing select { background: #0757bd; border-color: #5cb7ff; color: #fff; border-radius: 0; }
 .game-shell.landing input:focus { border-color: #ffe45a; }
+.game-shell.landing .eyebrow { color: #ffe45a; text-shadow: 1px 1px #0752b8; }
 .game-shell.landing .home-custom-words { border-top-color: #73c7ff; }
-.game-shell.landing .home-custom-words p:not(.eyebrow) { color: #e4f3ff; }
+.game-shell.landing .home-custom-words p:not(.eyebrow), .game-shell.landing .home-custom-words small { color: #fff; }
+.game-shell.landing .home-custom-words .error { color: #ffd6d6; }
+.game-shell.landing .home-custom-words .success { color: #b8ffd3 !important; }
 .game-shell.landing .home-custom-words .secondary { background: #ffca24; color: #173c8d; }
 @media (max-width: 900px) { .game-layout { grid-template-columns: 120px minmax(0, 1fr) 165px; gap: 12px; }.game-shell .sidebar { padding: 9px 7px; }.game-shell .player-row { grid-template-columns: 24px 1fr auto; gap: 5px; font-size: 12px; }.game-shell .avatar { width: 24px; height: 24px; }.round-panel { margin-top: 50px; } }
 @media (max-width: 680px) { .game-layout { grid-template-columns: 1fr; }.round-panel { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 8px; transform: none; }.round-panel .round-timer { display: flex; align-items: center; gap: 8px; }.round-panel > strong { padding: 4px 8px; }.game-shell .sidebar { display: flex; flex-wrap: wrap; gap: 4px 12px; transform: none; }.game-shell .score-head { width: 100%; margin-bottom: 2px; }.game-shell .player-row { margin: 4px 0; }.game-shell .reveal { grid-template-columns: 1fr; }.game-shell .reveal-drawing .canvas-board { max-height: 220px; }.game-shell .phone-qr { display: none; } }

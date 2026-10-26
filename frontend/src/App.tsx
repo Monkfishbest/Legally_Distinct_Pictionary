@@ -47,8 +47,6 @@ export default function App() {
 
   if (!room) return <main className="shell landing game-shell">
     <div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div>
-    <p className="eyebrow">CLASSIC MODE</p>
-    <h1>Make the room.<br /><em>Make the picture.</em></h1>
     <div className="entry-card">
       <div className="tabs"><button className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}>Create room</button><button className={mode === 'join' ? 'active' : ''} onClick={() => setMode('join')}>Join room</button></div>
       <label>Your name<input value={name} onChange={event => setName(event.target.value)} maxLength={30} /></label>

@@ -14,7 +14,7 @@ interface Props {
 export function CanvasBoard({ operations, canDraw, color, width, onOperation, onLiveOperation, onCanvasReady }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const draftRef = useRef<Point[]>([])
-  const pendingLiveSegment = useRef<Point[] | null>(null)
+  const pendingLivePoints = useRef<Point[] | null>(null)
   const pendingAcknowledgement = useRef<number | null>(null)
   const renderedSequence = useRef(0)
   const sentLiveOperations = useRef(0)
@@ -71,7 +71,7 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
     if (!canDraw && drawing.current) {
       drawing.current = false
       pendingAcknowledgement.current = null
-      pendingLiveSegment.current = null
+      pendingLivePoints.current = null
       draftRef.current = []
     }
   }, [canDraw])
@@ -84,12 +84,12 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
     }
   }
 
-  const sendPendingLiveSegment = () => {
-    const segment = pendingLiveSegment.current
-    if (!segment) return
-    onLiveOperation?.('Stroke', segment)
+  const sendPendingLivePoints = () => {
+    const points = pendingLivePoints.current
+    if (!points || points.length < 2) return
+    onLiveOperation?.('Stroke', points)
     sentLiveOperations.current += 1
-    pendingLiveSegment.current = null
+    pendingLivePoints.current = null
     lastLiveSentAt.current = performance.now()
   }
 
@@ -103,7 +103,7 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
       drawStroke(context, [firstPoint], color, width)
       sentLiveOperations.current = 0
       lastLiveSentAt.current = 0
-      pendingLiveSegment.current = null
+      pendingLivePoints.current = null
       draftRef.current = [firstPoint]
       try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* Mobile browsers may reject capture after cancellation. */ }
     }}
@@ -114,14 +114,16 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
       if (previousPoint) {
         const segment = [previousPoint, nextPoint]
         drawStroke(event.currentTarget.getContext('2d')!, segment, color, width)
-        pendingLiveSegment.current = segment
-        if (performance.now() - lastLiveSentAt.current >= 30) sendPendingLiveSegment()
+        pendingLivePoints.current = pendingLivePoints.current
+          ? [...pendingLivePoints.current, nextPoint]
+          : [previousPoint, nextPoint]
+        if (performance.now() - lastLiveSentAt.current >= 30) sendPendingLivePoints()
       }
       draftRef.current.push(nextPoint)
     }}
     onPointerUp={() => {
       if (!drawing.current) return
-      sendPendingLiveSegment()
+      sendPendingLivePoints()
       drawing.current = false
       const expectedOperations = Math.max(1, sentLiveOperations.current)
       pendingAcknowledgement.current = renderedSequence.current + expectedOperations
@@ -130,7 +132,7 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
     onPointerCancel={() => {
       drawing.current = false
       pendingAcknowledgement.current = null
-      pendingLiveSegment.current = null
+      pendingLivePoints.current = null
       draftRef.current = []
     }}
   />

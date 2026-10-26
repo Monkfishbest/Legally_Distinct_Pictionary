@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { DrawingOperation, Point } from './types'
 
 interface Props {
@@ -13,53 +13,66 @@ interface Props {
 
 export function CanvasBoard({ operations, canDraw, color, width, onOperation, onLiveOperation, onCanvasReady }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const [draft, setDraft] = useState<Point[]>([])
   const draftRef = useRef<Point[]>([])
-  const pendingAcknowledgement = useRef<{ sequence: number } | null>(null)
-  const strokeStartSequence = useRef(0)
+  const pendingLiveSegment = useRef<Point[] | null>(null)
+  const pendingAcknowledgement = useRef<number | null>(null)
+  const renderedSequence = useRef(0)
   const sentLiveOperations = useRef(0)
+  const lastLiveSentAt = useRef(0)
   const drawing = useRef(false)
 
-  useEffect(() => {
-    const latestSequence = operations.reduce((latest, operation) => Math.max(latest, operation.sequence), 0)
-    if (pendingAcknowledgement.current && latestSequence >= pendingAcknowledgement.current.sequence) {
-      pendingAcknowledgement.current = null
-      draftRef.current = []
-      setDraft([])
-    }
-  }, [operations])
+  const redrawAll = (context: CanvasRenderingContext2D, entries: DrawingOperation[]) => {
+    context.fillStyle = '#fffdf8'
+    context.fillRect(0, 0, context.canvas.width, context.canvas.height)
+    const rendered = entries.reduce<DrawingOperation[]>((result, operation) => {
+      if (operation.operationType === 'Undo') return result.slice(0, -1)
+      return [...result, operation]
+    }, [])
+    for (const operation of rendered) applyOperation(context, operation)
+    renderedSequence.current = entries.reduce((latest, operation) => Math.max(latest, operation.sequence), 0)
+  }
 
   useEffect(() => {
     const element = canvas.current
     if (!element) return
     onCanvasReady?.(element)
     const context = element.getContext('2d')!
-    context.fillStyle = '#fffdf8'
-    context.fillRect(0, 0, element.width, element.height)
-    const renderedOperations = operations.reduce<DrawingOperation[]>((result, operation) => {
-      if (operation.operationType === 'Undo') return result.slice(0, -1)
-      return [...result, operation]
-    }, [])
-    for (const operation of renderedOperations) {
-      if (operation.operationType === 'Fill') {
-        context.fillStyle = operation.color
-        context.fillRect(0, 0, element.width, element.height)
-      } else if (operation.operationType === 'Clear') {
-        context.fillStyle = '#fffdf8'
-        context.fillRect(0, 0, element.width, element.height)
-      } else if (operation.operationType === 'Stroke') {
-        drawStroke(context, operation.points, operation.color, operation.width)
-      }
+    redrawAll(context, operations)
+    // The canvas is initialized once. Incoming operations are applied incrementally below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const context = canvas.current?.getContext('2d')
+    if (!context) return
+    const latestSequence = operations.reduce((latest, operation) => Math.max(latest, operation.sequence), 0)
+    if (latestSequence < renderedSequence.current) {
+      redrawAll(context, operations)
+      return
     }
-    if (draft.length) drawStroke(context, draft, color, width)
-  }, [operations, draft, color, width, onCanvasReady])
+    if (pendingAcknowledgement.current !== null) {
+      if (latestSequence >= pendingAcknowledgement.current) {
+        pendingAcknowledgement.current = null
+        draftRef.current = []
+        redrawAll(context, operations)
+      }
+      return
+    }
+    const newOperations = operations.filter(operation => operation.sequence > renderedSequence.current)
+    if (newOperations.some(operation => operation.operationType !== 'Stroke')) {
+      redrawAll(context, operations)
+      return
+    }
+    for (const operation of newOperations) applyOperation(context, operation)
+    renderedSequence.current = Math.max(renderedSequence.current, latestSequence)
+  }, [operations])
 
   useEffect(() => {
     if (!canDraw && drawing.current) {
       drawing.current = false
       pendingAcknowledgement.current = null
+      pendingLiveSegment.current = null
       draftRef.current = []
-      setDraft([])
     }
   }, [canDraw])
 
@@ -71,44 +84,68 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
     }
   }
 
+  const sendPendingLiveSegment = () => {
+    const segment = pendingLiveSegment.current
+    if (!segment) return
+    onLiveOperation?.('Stroke', segment)
+    sentLiveOperations.current += 1
+    pendingLiveSegment.current = null
+    lastLiveSentAt.current = performance.now()
+  }
+
   return <canvas
     ref={canvas} width={900} height={560} className="canvas-board"
     onPointerDown={event => {
       if (!canDraw) return
       drawing.current = true
       const firstPoint = point(event)
-      strokeStartSequence.current = operations.reduce((latest, operation) => Math.max(latest, operation.sequence), 0)
+      const context = event.currentTarget.getContext('2d')!
+      drawStroke(context, [firstPoint], color, width)
       sentLiveOperations.current = 0
+      lastLiveSentAt.current = 0
+      pendingLiveSegment.current = null
       draftRef.current = [firstPoint]
-      try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* Some mobile browsers reject capture after a cancelled touch. */ }
-      setDraft([firstPoint])
+      try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* Mobile browsers may reject capture after cancellation. */ }
     }}
     onPointerMove={event => {
-      if (drawing.current && canDraw) {
-        const nextPoint = point(event)
-        const previousPoint = draftRef.current[draftRef.current.length - 1]
-        if (previousPoint) {
-          sentLiveOperations.current += 1
-          onLiveOperation?.('Stroke', [previousPoint, nextPoint])
-        }
-        draftRef.current = [...draftRef.current, nextPoint]
-        setDraft(current => [...current, nextPoint])
+      if (!drawing.current || !canDraw) return
+      const nextPoint = point(event)
+      const previousPoint = draftRef.current[draftRef.current.length - 1]
+      if (previousPoint) {
+        const segment = [previousPoint, nextPoint]
+        drawStroke(event.currentTarget.getContext('2d')!, segment, color, width)
+        pendingLiveSegment.current = segment
+        if (performance.now() - lastLiveSentAt.current >= 30) sendPendingLiveSegment()
       }
+      draftRef.current.push(nextPoint)
     }}
     onPointerUp={() => {
       if (!drawing.current) return
+      sendPendingLiveSegment()
       drawing.current = false
       const expectedOperations = Math.max(1, sentLiveOperations.current)
-      pendingAcknowledgement.current = { sequence: strokeStartSequence.current + expectedOperations }
+      pendingAcknowledgement.current = renderedSequence.current + expectedOperations
       if (draftRef.current.length === 1) onOperation('Stroke', draftRef.current)
     }}
     onPointerCancel={() => {
       drawing.current = false
       pendingAcknowledgement.current = null
+      pendingLiveSegment.current = null
       draftRef.current = []
-      setDraft([])
     }}
   />
+}
+
+function applyOperation(context: CanvasRenderingContext2D, operation: DrawingOperation) {
+  if (operation.operationType === 'Fill') {
+    context.fillStyle = operation.color
+    context.fillRect(0, 0, context.canvas.width, context.canvas.height)
+  } else if (operation.operationType === 'Clear') {
+    context.fillStyle = '#fffdf8'
+    context.fillRect(0, 0, context.canvas.width, context.canvas.height)
+  } else if (operation.operationType === 'Stroke') {
+    drawStroke(context, operation.points, operation.color, operation.width)
+  }
 }
 
 function drawStroke(context: CanvasRenderingContext2D, points: Point[], color: string, width: number) {

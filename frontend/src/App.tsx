@@ -45,8 +45,9 @@ export default function App() {
     catch (caught) { setCustomMessage({ text: caught instanceof Error ? caught.message : 'Could not add custom word', success: false }) }
   }
 
-  if (!room) return <main className="shell landing">
+  if (!room) return <main className="shell landing game-shell">
     <div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div>
+    <p className="eyebrow">CLASSIC MODE</p>
     <h1>Make the room.<br /><em>Make the picture.</em></h1>
     <div className="entry-card">
       <div className="tabs"><button className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}>Create room</button><button className={mode === 'join' ? 'active' : ''} onClick={() => setMode('join')}>Join room</button></div>
@@ -195,7 +196,7 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
     <section className="phone-panel">{phaseTitle(phase, isArtist) && <h1>{phaseTitle(phase, isArtist)}</h1>}{socket.word && isArtist && <div className="phone-word"><small>{socket.wordDifficulty ?? 'SELECTED'} →</small><strong>{socket.word}</strong><span>Keep it secret.</span></div>}
       {phase === 'Lobby' && <div className="phone-wait">Waiting for the host to start the game.</div>}
       {phase === 'WordSelection' && <DifficultyPicker isArtist={isArtist} options={socket.wordOptions} onChoose={(difficulty, wordId) => send('turn.choose_difficulty', { difficulty, wordId })} />}
-      {phase === 'Countdown' && <CountdownScreen seconds={socket.countdown ?? 5} />}
+      {phase === 'Countdown' && <CountdownScreen seconds={socket.countdown} />}
       {phase === 'Drawing' && socket.countdown !== null && <CountdownScreen seconds={socket.countdown} />}
       {socket.countdown === null && (phase === 'Drawing' && isArtist && selectingGuess ? <TurnActions key={game?.turnNumber} isArtist forceSelection players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} /> : <>{(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} onCanvasReady={setCanvas} onOperation={(operationType, points) => send('drawing.operation', { operationType, points: points ?? [], color, width })} onLiveOperation={(operationType, points) => send('drawing.operation', { operationType, points, color, width })} /></div><DrawingControls canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} setColor={setColor} setWidth={setWidth} onAction={operationType => send('drawing.operation', { operationType, points: [], color, width })} /></>}
       {phase === 'Drawing' && <TurnActions key={game?.turnNumber} isArtist={isArtist} forceSelection={false} players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onOpenSelection={() => setSelectingGuess(true)} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} />}</>)}
@@ -209,9 +210,9 @@ function DifficultyPicker({ isArtist, options, onChoose }: { isArtist: boolean; 
   return <div className="difficulty-picker"><p>{isArtist ? 'Choose the word you want to draw.' : 'The artist is choosing a word.'}</p>{isArtist && <div className="difficulty-grid">{difficulties.map((difficulty, index) => { const option = options.find(candidate => candidate.difficulty === difficulty); return <button key={difficulty} className={`difficulty ${difficulty.toLowerCase()}`} disabled={!option} onClick={() => option && onChoose(difficulty, option.id)}><span>{['●', '◆', '▲', '✦'][index]}</span><strong>{difficulty}</strong><b>{option?.displayText ?? 'Loading word...'}</b><small>{['1× points', '1.5× points', '2× points', '3× points'][index]}</small></button> })}</div>}</div>
 }
 
-function CountdownScreen({ seconds }: { seconds: number }) {
-  useEffect(() => { playCountdownSound(seconds) }, [seconds])
-  return <div className="countdown-screen"><p className="eyebrow">GET READY</p><strong>{seconds}</strong><span>Drawing starts soon</span></div>
+function CountdownScreen({ seconds }: { seconds: number | null }) {
+  useEffect(() => { if (seconds !== null) playCountdownSound(seconds) }, [seconds])
+  return <div className="countdown-screen"><p className="eyebrow">GET READY</p><strong>{seconds ?? 'GO'}</strong><span>{seconds === null ? 'Start drawing!' : 'Drawing starts soon'}</span></div>
 }
 
 function WordBriefing({ difficulty, word, onStart }: { difficulty: Difficulty | null; word: string; onStart: () => void }) {

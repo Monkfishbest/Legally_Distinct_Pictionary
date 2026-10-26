@@ -6,7 +6,9 @@ import persistence.{GamePersistence, ImageStorage, NoopGamePersistence, NoopImag
 import javax.inject.Inject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import scala.jdk.CollectionConverters.*
+import org.slf4j.LoggerFactory
 
 final class RoomService @Inject() (
     gamePersistence: GamePersistence,
@@ -17,6 +19,12 @@ final class RoomService @Inject() (
   private val games = new ConcurrentHashMap[String, GameState]().asScala
   private val drawings = new ConcurrentHashMap[String, Vector[DrawingOperation]]().asScala
   private val drawingSequences = new ConcurrentHashMap[String, Long]().asScala
+  private val drawingPersistenceExecutor = Executors.newSingleThreadExecutor((runnable: Runnable) =>
+    val thread = new Thread(runnable, "drawing-persistence")
+    thread.setDaemon(true)
+    thread
+  )
+  private val logger = LoggerFactory.getLogger(classOf[RoomService])
   private val maxPlayers = 12
 
   loadPersistedState()
@@ -137,11 +145,14 @@ final class RoomService @Inject() (
         )
 
       operationResult.flatMap: operation =>
-        gamePersistence.saveDrawing(normalizedCode, operation).map:
-          _ =>
-            drawings.update(normalizedCode, drawings.getOrElse(normalizedCode, Vector.empty) :+ operation)
-            drawingSequences.put(normalizedCode, operation.sequence)
-            operation
+        drawings.update(normalizedCode, drawings.getOrElse(normalizedCode, Vector.empty) :+ operation)
+        drawingSequences.put(normalizedCode, operation.sequence)
+        drawingPersistenceExecutor.execute(() =>
+          gamePersistence.saveDrawing(normalizedCode, operation) match
+            case Left(error) => logger.warn(s"Could not persist drawing operation ${operation.id}: $error")
+            case Right(_) => ()
+        )
+        Right(operation)
 
   def drawingSnapshot(code: String): Either[GameError, Vector[DrawingOperation]] =
     find(code).toRight(GameError.InvalidRoomCode).map:

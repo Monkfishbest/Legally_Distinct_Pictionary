@@ -2,6 +2,7 @@ package domain
 
 enum GameError:
   case NotEnoughPlayers
+  case PlayersNotConnected
   case InvalidPhase(expected: GamePhase, actual: GamePhase)
   case InvalidSettings
   case PlayerNotFound(playerId: String)

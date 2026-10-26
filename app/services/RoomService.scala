@@ -67,6 +67,16 @@ final class RoomService @Inject() (
   def currentState(code: String): Option[GameState] =
     games.get(code.trim.toUpperCase)
 
+  def beginDrawing(code: String): Either[GameError, GameState] =
+    this.synchronized:
+      val normalizedCode = code.trim.toUpperCase
+      games.get(normalizedCode).toRight(GameError.InvalidRoomCode).flatMap: state =>
+        Either.cond(state.phase == GamePhase.Countdown, (), GameError.InvalidPhase(GamePhase.Countdown, state.phase)).flatMap: _ =>
+          val updated = state.copy(phase = GamePhase.Drawing)
+          gamePersistence.saveGame(updated).map: _ =>
+            games.put(normalizedCode, updated)
+            updated
+
   def execute(
       code: String,
       command: realtime.GameCommand,

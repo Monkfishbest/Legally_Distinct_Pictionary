@@ -1,7 +1,7 @@
 package domain
 
 enum GamePhase:
-  case Lobby, WordSelection, Drawing, TurnComplete, Complete
+  case Lobby, WordSelection, Countdown, Drawing, TurnComplete, Complete
 
 enum WordDifficulty:
   case Simple, Medium, Hard, Impossible

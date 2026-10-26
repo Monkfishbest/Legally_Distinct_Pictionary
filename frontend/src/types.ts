@@ -1,5 +1,5 @@
 export type Difficulty = 'Simple' | 'Medium' | 'Hard' | 'Impossible'
-export type Phase = 'Lobby' | 'WordSelection' | 'Drawing' | 'TurnComplete' | 'Complete'
+export type Phase = 'Lobby' | 'WordSelection' | 'Countdown' | 'Drawing' | 'TurnComplete' | 'Complete'
 
 export interface Player {
   id: string
@@ -10,6 +10,7 @@ export interface Player {
 export interface Room {
   code: string
   ownerId: string
+  connectedPlayerIds?: string[]
   currentPlayerId: string | null
   players: Player[]
   settings: { turnDurationSeconds: number; turnsPerPlayer: number }
@@ -65,6 +66,7 @@ export type ServerEvent =
   | { type: 'drawing.operation'; operation: DrawingOperation }
   | { type: 'drawing.snapshot'; operations: DrawingOperation[] }
   | { type: 'turn.word_assigned'; word: string; difficulty: Difficulty }
+  | { type: 'turn.countdown'; seconds: number }
   | { type: 'turn.word_options'; options: WordOption[] }
   | { type: 'turn.reveal'; word: string; difficulty: Difficulty; correct: boolean }
   | { type: 'error'; error: string }

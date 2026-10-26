@@ -4,12 +4,13 @@ import domain.*
 import play.api.libs.json.*
 
 object GameEvent:
-  def roomState(room: Room): String =
+  def roomState(room: Room, connectedPlayerIds: Set[String] = Set.empty): String =
     Json.obj(
       "type" -> "room.state",
       "room" -> Json.obj(
         "code" -> room.code,
         "ownerId" -> room.ownerId,
+        "connectedPlayerIds" -> connectedPlayerIds.toVector,
         "players" -> room.players.map: player =>
           Json.obj("id" -> player.id, "name" -> player.name, "score" -> player.score),
         "settings" -> Json.obj(
@@ -37,6 +38,9 @@ object GameEvent:
       "word" -> word.displayText,
       "difficulty" -> word.difficulty.toString
     ).toString
+
+  def countdown(seconds: Int): String =
+    Json.obj("type" -> "turn.countdown", "seconds" -> seconds).toString
 
   def wordOptions(words: Vector[Word]): String =
     Json.obj(
@@ -84,6 +88,7 @@ object GameEvent:
         case GameError.PlayerAlreadyConfirmed(id) => s"Player already confirmed: $id"
         case GameError.DifficultyNotSelected => "A difficulty must be selected first"
         case GameError.NotEnoughPlayers => "At least two players are required"
+        case GameError.PlayersNotConnected => "Every player must connect their phone before the game starts"
         case GameError.InvalidSettings => "The game settings are invalid"
         case GameError.NoWordsAvailable(difficulty) => s"No words available for $difficulty"
         case GameError.InvalidWord(reason) => reason

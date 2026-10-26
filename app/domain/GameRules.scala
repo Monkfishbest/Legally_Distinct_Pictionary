@@ -39,7 +39,7 @@ object GameRules:
       case state =>
         Right(
           state.copy(
-            phase = GamePhase.Drawing,
+            phase = GamePhase.Countdown,
             difficulty = Some(difficulty),
             confirmedPlayerIds = Vector.empty
           )

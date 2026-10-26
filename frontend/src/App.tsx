@@ -47,7 +47,6 @@ export default function App() {
 
   if (!room) return <main className="shell landing">
     <div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div>
-    <p className="eyebrow">CLASSIC MODE</p>
     <h1>Make the room.<br /><em>Make the picture.</em></h1>
     <div className="entry-card">
       <div className="tabs"><button className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}>Create room</button><button className={mode === 'join' ? 'active' : ''} onClick={() => setMode('join')}>Join room</button></div>
@@ -69,7 +68,6 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
   const [gallery, setGallery] = useState<GalleryItem[]>([])
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const isOwner = currentRoom.ownerId === currentRoom.currentPlayerId
-  const me = socket.game?.players.find(player => player.id === room.currentPlayerId) ?? currentRoom.players.find(player => player.id === room.currentPlayerId)
 
   useEffect(() => { if (socket.error) onError(socket.error) }, [socket.error, onError])
   useEffect(() => {
@@ -106,8 +104,9 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
       <aside className="round-panel"><span className="round-label">ROUND</span><strong>{game?.turnNumber ?? 0}<small> / {room.settings.turnsPerPlayer * players.length}</small></strong><div className={`round-timer ${timeLeft !== null && timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><b>{timeLeft === null ? '--:--' : formatTime(timeLeft)}</b></div>{game?.difficulty && <span className="round-points">{game.difficulty} round</span>}</aside>
       <section className="board-area">
         <div className="phase-bar"><div><span className="eyebrow">{phase === 'Lobby' ? 'WAITING ROOM' : `TURN ${game?.turnNumber ?? 0}`}</span><h2>{phaseTitle(phase, false)}</h2></div></div>
-        {phase === 'Lobby' && <Lobby room={currentRoom} isOwner={isOwner} phoneUrl={phoneUrl} onStart={() => send('game.start')} />}
+        {phase === 'Lobby' && <Lobby room={currentRoom} isOwner={isOwner} publicOrigin={publicOrigin} onStart={() => send('game.start')} />}
         {phase === 'WordSelection' && <DifficultyPicker isArtist={false} options={[]} onChoose={() => undefined} />}
+        {phase === 'Countdown' && <CountdownScreen seconds={socket.countdown ?? 5} />}
         {(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={false} color="#171923" width={8} onOperation={() => undefined} /></div><div className="display-note">The artist is drawing from their phone.</div></>}
         {phase === 'Drawing' && <div className="waiting-note">The artist controls the word, correct guesses, and end of turn from their phone.</div>}
         {phase === 'TurnComplete' && socket.reveal && <Reveal reveal={socket.reveal} operations={socket.operations} />}
@@ -115,11 +114,10 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
       <aside className="sidebar"><div className="score-head"><span>PLAYERS</span><span>SCORE</span></div>{players.map(player => <div className={`player-row ${player.id === game?.artistId ? 'artist' : ''}`} key={player.id}><span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span><span>{player.name}{player.id === room.currentPlayerId && <small> YOU</small>}{player.id === game?.artistId && <b>✎</b>}</span><strong>{player.score}</strong></div>)}</aside>
     </section>
     {socket.error && <div className="toast error">{socket.error}</div>}
-    <div className="me-label">Playing as <strong>{me?.name}</strong></div>
   </main>
 }
 
-function Lobby({ room, isOwner, phoneUrl, onStart }: { room: Room; isOwner: boolean; phoneUrl: string; onStart: () => void }) {
+function Lobby({ room, isOwner, publicOrigin, onStart }: { room: Room; isOwner: boolean; publicOrigin: string; onStart: () => void }) {
   const [word, setWord] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('Simple')
   const [wordMessage, setWordMessage] = useState<WordMessage | null>(null)
@@ -127,7 +125,9 @@ function Lobby({ room, isOwner, phoneUrl, onStart }: { room: Room; isOwner: bool
     try { await createCustomWord(word, difficulty); setWord(''); setWordMessage({ text: 'Custom word added to the shared word pool.', success: true }) }
     catch (error) { setWordMessage({ text: error instanceof Error ? error.message : 'Could not add custom word', success: false }) }
   }
-  return <div className="lobby"><div className="lobby-icon">✦</div><h3>Invite your people</h3><p>Share the room code, then scan the QR code on the painter’s phone.</p><div className="big-code">{room.code}</div><div className="qr-card"><QRCodeSVG value={phoneUrl} size={124} bgColor="#fffdf8" fgColor="#10131c" /><small>SCAN TO CONTROL THE GAME</small></div><button className="primary" disabled={!isOwner || room.players.length < 2} onClick={onStart}>{room.players.length < 2 ? 'Waiting for players...' : 'Start game →'}</button><div className="custom-word-form"><p className="eyebrow">ADD A CUSTOM WORD</p><input value={word} onChange={event => setWord(event.target.value)} maxLength={100} /><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!word.trim()} onClick={submitWord}>Add word</button>{wordMessage && <small className={wordMessage.success ? 'success' : 'error'}>{wordMessage.text}</small>}</div></div>
+  const connectedIds = room.connectedPlayerIds ?? []
+  const everyoneConnected = room.players.length >= 2 && room.players.every(player => connectedIds.includes(player.id))
+  return <div className="lobby"><div className="lobby-icon">✦</div><h3>Connect every phone</h3><p>Each player scans their own QR code before the host can start.</p><div className="big-code">{room.code}</div><div className="player-qr-list">{room.players.map(player => <div className="player-qr" key={player.id}><QRCodeSVG value={`${publicOrigin}/?phone=1&room=${encodeURIComponent(room.code)}&playerId=${encodeURIComponent(player.id)}`} size={76} bgColor="#fffdf8" fgColor="#10131c" /><small>{player.name}<br />{connectedIds.includes(player.id) ? 'CONNECTED' : 'SCAN TO CONNECT'}</small></div>)}</div><button className="primary" disabled={!isOwner || !everyoneConnected} onClick={onStart}>{!everyoneConnected ? 'Connect all phones first' : 'Start game →'}</button><div className="custom-word-form"><p className="eyebrow">ADD A CUSTOM WORD</p><input value={word} onChange={event => setWord(event.target.value)} maxLength={100} /><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!word.trim()} onClick={submitWord}>Add word</button>{wordMessage && <small className={wordMessage.success ? 'success' : 'error'}>{wordMessage.text}</small>}</div></div>
 }
 
 function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: string }) {
@@ -139,7 +139,6 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
   const [gallery, setGallery] = useState<GalleryItem[]>([])
   const [roundExpired, setRoundExpired] = useState(false)
   const [selectingGuess, setSelectingGuess] = useState(false)
-  const [readyToDraw, setReadyToDraw] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const lastSavedTurn = useRef<number | null>(null)
   const game = socket.game
@@ -147,7 +146,7 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
   const isArtist = game?.artistId === playerId
 
   useEffect(() => {
-    if (game?.phase !== 'Drawing' || !isArtist) {
+    if (game?.phase !== 'Drawing' || !isArtist || socket.countdown !== null) {
       setRoundExpired(false)
       return
     }
@@ -162,15 +161,11 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
       }
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [game?.phase, game?.turnNumber, isArtist, socket.room?.settings?.turnDurationSeconds])
+  }, [game?.phase, game?.turnNumber, isArtist, socket.room?.settings?.turnDurationSeconds, socket.countdown])
 
   useEffect(() => {
     if (game?.phase !== 'Drawing' || !isArtist) setSelectingGuess(false)
   }, [game?.phase, game?.turnNumber, isArtist])
-
-  useEffect(() => {
-    if (game?.phase !== 'Drawing') setReadyToDraw(false)
-  }, [game?.phase, game?.turnNumber])
 
   useEffect(() => {
     if (game?.phase !== 'TurnComplete' || !isArtist || !canvas || lastSavedTurn.current === game.turnNumber) return
@@ -193,7 +188,6 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
   }, [game?.phase, game?.id])
 
   const send = (type: string, values: object = {}) => socket.send({ type, playerId, ...values })
-  const showWordBriefing = phase === 'Drawing' && isArtist && Boolean(socket.word) && !readyToDraw && !roundExpired
   if (game?.phase === 'Complete') return <Gallery gameId={game.id} items={gallery} />
 
   return <main className="shell phone-shell">
@@ -201,8 +195,9 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
     <section className="phone-panel">{phaseTitle(phase, isArtist) && <h1>{phaseTitle(phase, isArtist)}</h1>}{socket.word && isArtist && <div className="phone-word"><small>{socket.wordDifficulty ?? 'SELECTED'} →</small><strong>{socket.word}</strong><span>Keep it secret.</span></div>}
       {phase === 'Lobby' && <div className="phone-wait">Waiting for the host to start the game.</div>}
       {phase === 'WordSelection' && <DifficultyPicker isArtist={isArtist} options={socket.wordOptions} onChoose={(difficulty, wordId) => send('turn.choose_difficulty', { difficulty, wordId })} />}
-      {showWordBriefing && <WordBriefing difficulty={socket.wordDifficulty} word={socket.word!} onStart={() => setReadyToDraw(true)} />}
-      {!showWordBriefing && (phase === 'Drawing' && isArtist && selectingGuess ? <TurnActions key={game?.turnNumber} isArtist forceSelection players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} /> : <>{(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} onCanvasReady={setCanvas} onOperation={(operationType, points) => send('drawing.operation', { operationType, points: points ?? [], color, width })} onLiveOperation={(operationType, points) => send('drawing.operation', { operationType, points, color, width })} /></div><DrawingControls canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} setColor={setColor} setWidth={setWidth} onAction={operationType => send('drawing.operation', { operationType, points: [], color, width })} /></>}
+      {phase === 'Countdown' && <CountdownScreen seconds={socket.countdown ?? 5} />}
+      {phase === 'Drawing' && socket.countdown !== null && <CountdownScreen seconds={socket.countdown} />}
+      {socket.countdown === null && (phase === 'Drawing' && isArtist && selectingGuess ? <TurnActions key={game?.turnNumber} isArtist forceSelection players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} /> : <>{(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} onCanvasReady={setCanvas} onOperation={(operationType, points) => send('drawing.operation', { operationType, points: points ?? [], color, width })} onLiveOperation={(operationType, points) => send('drawing.operation', { operationType, points, color, width })} /></div><DrawingControls canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} setColor={setColor} setWidth={setWidth} onAction={operationType => send('drawing.operation', { operationType, points: [], color, width })} /></>}
       {phase === 'Drawing' && <TurnActions key={game?.turnNumber} isArtist={isArtist} forceSelection={false} players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onOpenSelection={() => setSelectingGuess(true)} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} />}</>)}
       {phase === 'TurnComplete' && isArtist && <div className="next-turn"><p>{uploading ? 'Saving drawing...' : saveError ?? 'Drawing saved. Starting next turn...'}</p></div>}
     </section>
@@ -212,6 +207,11 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
 
 function DifficultyPicker({ isArtist, options, onChoose }: { isArtist: boolean; options: { id: string; displayText: string; difficulty: Difficulty }[]; onChoose: (difficulty: Difficulty, wordId: string) => void }) {
   return <div className="difficulty-picker"><p>{isArtist ? 'Choose the word you want to draw.' : 'The artist is choosing a word.'}</p>{isArtist && <div className="difficulty-grid">{difficulties.map((difficulty, index) => { const option = options.find(candidate => candidate.difficulty === difficulty); return <button key={difficulty} className={`difficulty ${difficulty.toLowerCase()}`} disabled={!option} onClick={() => option && onChoose(difficulty, option.id)}><span>{['●', '◆', '▲', '✦'][index]}</span><strong>{difficulty}</strong><b>{option?.displayText ?? 'Loading word...'}</b><small>{['1× points', '1.5× points', '2× points', '3× points'][index]}</small></button> })}</div>}</div>
+}
+
+function CountdownScreen({ seconds }: { seconds: number }) {
+  useEffect(() => { playCountdownSound(seconds) }, [seconds])
+  return <div className="countdown-screen"><p className="eyebrow">GET READY</p><strong>{seconds}</strong><span>Drawing starts soon</span></div>
 }
 
 function WordBriefing({ difficulty, word, onStart }: { difficulty: Difficulty | null; word: string; onStart: () => void }) {
@@ -248,6 +248,21 @@ function playRevealSound(correct: boolean) {
   oscillator.addEventListener('ended', () => void audio.close())
 }
 
+function playCountdownSound(seconds: number) {
+  if (seconds <= 0) return
+  const audio = new AudioContext()
+  const oscillator = audio.createOscillator()
+  const gain = audio.createGain()
+  oscillator.connect(gain).connect(audio.destination)
+  oscillator.frequency.value = seconds === 1 ? 880 : 620
+  gain.gain.setValueAtTime(0.001, audio.currentTime)
+  gain.gain.exponentialRampToValueAtTime(0.12, audio.currentTime + 0.02)
+  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.16)
+  oscillator.start()
+  oscillator.stop(audio.currentTime + 0.18)
+  oscillator.addEventListener('ended', () => void audio.close())
+}
+
 function Gallery({ gameId, items }: { gameId: string; items: GalleryItem[] }) {
   return <main className="shell gallery-page"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><p className="eyebrow">GAME COMPLETE</p><h1>The gallery</h1><p className="gallery-subtitle">A little evidence of what happened here.</p><div className="gallery-strip">{items.map(item => <figure key={item.turnNumber}><img src={item.imageUrl} alt={`Turn ${item.turnNumber}`} /><figcaption><small>TURN {item.turnNumber} · {item.difficulty}</small><strong>{item.answer ?? 'Unknown word'}</strong><span>Drawn by {item.artistName}</span></figcaption></figure>)}{!items.length && <p>No finished drawings were uploaded.</p>}</div><button className="secondary" onClick={() => window.location.reload()}>Play again</button><span className="gallery-id">{gameId}</span></main>
 }
@@ -255,6 +270,7 @@ function Gallery({ gameId, items }: { gameId: string; items: GalleryItem[] }) {
 function phaseTitle(phase: string, isArtist: boolean) {
   if (phase === 'Lobby') return 'Ready when you are.'
   if (phase === 'WordSelection') return isArtist ? 'Pick your difficulty.' : 'The artist is choosing.'
+  if (phase === 'Countdown') return 'Get ready!'
   if (phase === 'TurnComplete') return 'Turn complete.'
   return isArtist ? '' : 'What is it?'
 }

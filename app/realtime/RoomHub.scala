@@ -10,6 +10,7 @@ import services.RoomService
 import javax.inject.*
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
+import java.util.concurrent.{Executors, TimeUnit}
 
 @Singleton
 final class RoomHub @Inject() (
@@ -20,6 +21,7 @@ final class RoomHub @Inject() (
   private given ExecutionContext = executionContext
   private val connections = TrieMap.empty[String, Set[(String, ActorRef)]]
   private val selectedWords = TrieMap.empty[String, Word]
+  private val countdownScheduler = Executors.newScheduledThreadPool(1)
 
   def flow(roomCode: String, playerId: String): Flow[String, String, Any] =
     val source = Source
@@ -34,13 +36,15 @@ final class RoomHub @Inject() (
     Flow.fromSinkAndSourceCoupled(sink, source)
 
   def broadcastRoom(room: Room): Unit =
-    broadcast(room.code, GameEvent.roomState(room))
+    broadcast(room.code, GameEvent.roomState(room, connectedPlayerIds(room.code)))
 
   private def add(roomCode: String, playerId: String, connection: ActorRef): Unit =
     connections.updateWith(roomCode):
       case Some(existing) => Some(existing + ((playerId, connection)))
       case None => Some(Set((playerId, connection)))
-    roomService.find(roomCode).foreach(room => connection ! GameEvent.roomState(room))
+    roomService.find(roomCode).foreach: room =>
+      connection ! GameEvent.roomState(room, connectedPlayerIds(roomCode))
+      broadcastRoom(room)
     roomService.currentState(roomCode).foreach(state => connection ! GameEvent.state(state))
     roomService.drawingSnapshot(roomCode).foreach:
       case operations if operations.nonEmpty => connection ! GameEvent.drawingSnapshot(operations)
@@ -51,6 +55,10 @@ final class RoomHub @Inject() (
       case Some(existing) if existing.size > 1 => Some(existing.filterNot(_._2 == connection))
       case Some(_) => None
       case None => None
+    roomService.find(roomCode).foreach(broadcastRoom)
+
+  private def connectedPlayerIds(roomCode: String): Set[String] =
+    connections.get(roomCode).fold(Set.empty[String])(_.map(_._1))
 
   private def broadcast(roomCode: String, message: String): Unit =
     connections.get(roomCode).foreach(_.foreach { case (_, connection) => connection ! message })
@@ -72,6 +80,13 @@ final class RoomHub @Inject() (
                       selectedWords.put(roomCode, word)
                       broadcast(roomCode, GameEvent.state(state))
                       sendToPlayer(roomCode, playerId, GameEvent.wordAssigned(word))
+                      broadcast(roomCode, GameEvent.countdown(5))
+                      countdownScheduler.schedule(
+                        new Runnable:
+                          def run(): Unit =
+                            roomService.beginDrawing(roomCode).foreach(updated => broadcast(roomCode, GameEvent.state(updated)))
+                        , 5, TimeUnit.SECONDS
+                      )
                   }
                 case None => broadcast(roomCode, GameEvent.error(GameError.InvalidWord("The selected word is no longer available")))
               }
@@ -90,7 +105,11 @@ final class RoomHub @Inject() (
               case Right(operations) => sendToPlayer(roomCode, playerId, GameEvent.drawingSnapshot(operations))
 
           case _ =>
-            roomService.execute(roomCode, authenticatedCommand) match
+            val canStart = authenticatedCommand match
+              case _: StartGame => roomService.find(roomCode).exists(room => room.players.forall(player => connectedPlayerIds(roomCode).contains(player.id)))
+              case _ => true
+            if !canStart then broadcast(roomCode, GameEvent.error(GameError.PlayersNotConnected))
+            else roomService.execute(roomCode, authenticatedCommand) match
               case Left(error) => broadcast(roomCode, GameEvent.error(error))
               case Right(state) =>
                 broadcast(roomCode, GameEvent.state(state))

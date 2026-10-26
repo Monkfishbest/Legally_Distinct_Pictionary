@@ -105,7 +105,7 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
         {phase === 'Lobby' && <Lobby room={currentRoom} isOwner={isOwner} publicOrigin={publicOrigin} onStart={() => send('game.start')} />}
         {phase === 'WordSelection' && <DifficultyPicker isArtist={false} options={[]} onChoose={() => undefined} />}
         {phase === 'Countdown' && <CountdownScreen seconds={socket.countdown ?? 5} />}
-        {(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={false} color="#171923" width={8} onOperation={() => undefined} /></div><div className="display-note">The artist is drawing from their phone.</div></>}
+        {phase === 'Drawing' && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={false} color="#171923" width={8} onOperation={() => undefined} /></div><div className="display-note">The artist is drawing from their phone.</div></>}
         {phase === 'Drawing' && <div className="waiting-note">The artist controls the word, correct guesses, and end of turn from their phone.</div>}
         {phase === 'TurnComplete' && socket.reveal && <Reveal reveal={socket.reveal} operations={socket.operations} />}
       </section>
@@ -130,7 +130,7 @@ function Lobby({ room, isOwner, publicOrigin, onStart }: { room: Room; isOwner: 
 }
 
 function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: string }) {
-  const socket = useGameSocket(roomCode, playerId)
+  const socket = useGameSocket(roomCode, playerId, true)
   const [color, setColor] = useState('#171923')
   const [width, setWidth] = useState(8)
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null)
@@ -174,7 +174,7 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
       try {
         if (!blob) throw new Error('Could not capture the finished drawing')
         await uploadFinishedImage(game.id, game.turnNumber, playerId, blob)
-        send('turn.next')
+        window.setTimeout(() => send('turn.next'), 4500)
       } catch (caught) {
         lastSavedTurn.current = null
         setSaveError(caught instanceof Error ? caught.message : 'Could not save the drawing')
@@ -196,7 +196,8 @@ function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: s
       {phase === 'WordSelection' && <DifficultyPicker isArtist={isArtist} options={socket.wordOptions} onChoose={(difficulty, wordId) => send('turn.choose_difficulty', { difficulty, wordId })} />}
       {phase === 'Countdown' && <CountdownScreen seconds={socket.countdown} />}
       {phase === 'Drawing' && socket.countdown !== null && <CountdownScreen seconds={socket.countdown} />}
-      {socket.countdown === null && (phase === 'Drawing' && isArtist && selectingGuess ? <TurnActions key={game?.turnNumber} isArtist forceSelection players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} /> : <>{(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} onCanvasReady={setCanvas} onOperation={(operationType, points) => send('drawing.operation', { operationType, points: points ?? [], color, width })} onLiveOperation={(operationType, points) => send('drawing.operation', { operationType, points, color, width })} /></div><DrawingControls canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} setColor={setColor} setWidth={setWidth} onAction={operationType => send('drawing.operation', { operationType, points: [], color, width })} /></>}
+      {socket.countdown === null && (phase === 'Drawing' && isArtist && selectingGuess ? <TurnActions key={game?.turnNumber} isArtist forceSelection players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} /> : <>{phase === 'Drawing' && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} onCanvasReady={setCanvas} onOperation={(operationType, points) => send('drawing.operation', { operationType, points: points ?? [], color, width })} onLiveOperation={(operationType, points) => send('drawing.operation', { operationType, points, color, width })} /></div><DrawingControls canDraw={isArtist && phase === 'Drawing' && !roundExpired} color={color} width={width} setColor={setColor} setWidth={setWidth} onAction={operationType => send('drawing.operation', { operationType, points: [], color, width })} /></>}
+      {phase === 'TurnComplete' && socket.reveal && <Reveal reveal={socket.reveal} operations={socket.operations} />}
       {phase === 'Drawing' && <TurnActions key={game?.turnNumber} isArtist={isArtist} forceSelection={false} players={game?.players ?? []} confirmed={game?.confirmedPlayerIds ?? []} artistId={playerId} onOpenSelection={() => setSelectingGuess(true)} onConfirm={targetPlayerId => { send('turn.confirm_player', { targetPlayerId, elapsedSeconds: 0 }); send('turn.end') }} onEnd={() => send('turn.end')} />}</>)}
       {phase === 'TurnComplete' && isArtist && <div className="next-turn"><p>{uploading ? 'Saving drawing...' : saveError ?? 'Drawing saved. Starting next turn...'}</p></div>}
     </section>

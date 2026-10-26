@@ -22,3 +22,18 @@ final class TurnRulesSpec extends FunSuite:
     assertEquals(next.phase, GamePhase.WordSelection)
     assertEquals(next.artist.map(_.id), Some("player-2"))
     assertEquals(next.turnNumber, 2)
+
+  test("finishes after every player has taken the configured number of turns"):
+    val state = GameState(
+      "game-1",
+      players,
+      settings = GameSettings(turnsPerPlayer = 1),
+      phase = GamePhase.TurnComplete,
+      artistIndex = 1,
+      turnNumber = 2
+    )
+
+    val next = GameRules.nextTurn(state).toOption.get
+
+    assertEquals(next.phase, GamePhase.Complete)
+    assertEquals(next.turnNumber, 2)

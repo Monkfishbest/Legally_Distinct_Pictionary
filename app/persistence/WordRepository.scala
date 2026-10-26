@@ -32,7 +32,7 @@ final class JdbcWordRepository @Inject() (
           |WHERE active = TRUE
           |  AND difficulty = ?
           |  AND source IN ('BuiltIn', 'Custom')
-          |ORDER BY display_text
+          |ORDER BY RANDOM()
           |""".stripMargin
       )
       statement.setString(1, difficulty.toString)

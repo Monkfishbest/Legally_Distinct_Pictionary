@@ -105,6 +105,9 @@ object GameRules:
       case state if state.players.isEmpty =>
         Left(GameError.NotEnoughPlayers)
 
+      case state if state.turnNumber >= state.settings.turnsPerPlayer * state.players.size =>
+        Right(state.copy(phase = GamePhase.Complete))
+
       case state =>
         Right(
           state.copy(

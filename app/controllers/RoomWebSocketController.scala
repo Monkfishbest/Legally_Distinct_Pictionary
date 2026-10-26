@@ -19,5 +19,7 @@ final class RoomWebSocketController @Inject() (
         case None => Future.successful(Left(Results.BadRequest("playerId is required")))
         case Some(playerId) if !roomService.hasPlayer(normalizedCode, playerId) =>
           Future.successful(Left(Results.Forbidden("Player is not in this room")))
-        case Some(playerId) => Future.successful(Right(roomHub.flow(normalizedCode, playerId)))
+        case Some(playerId) =>
+          val phoneConnection = request.getQueryString("phone").contains("1")
+          Future.successful(Right(roomHub.flow(normalizedCode, playerId, phoneConnection)))
     }

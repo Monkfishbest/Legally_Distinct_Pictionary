@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Difficulty, DrawingOperation, GameState, Room, ServerEvent, TurnReveal, WordOption } from './types'
 
-export function useGameSocket(roomCode: string | null, playerId: string | null) {
+export function useGameSocket(roomCode: string | null, playerId: string | null, phoneConnection = false) {
   const socket = useRef<WebSocket | null>(null)
   const pendingMessages = useRef<string[]>([])
   const [connected, setConnected] = useState(false)
@@ -32,7 +32,8 @@ export function useGameSocket(roomCode: string | null, playerId: string | null) 
 
     const connect = () => {
       if (stopped) return
-      const ws = new WebSocket(`${wsOrigin}/api/rooms/${roomCode}/ws?playerId=${playerId}`)
+      const phoneQuery = phoneConnection ? '&phone=1' : ''
+      const ws = new WebSocket(`${wsOrigin}/api/rooms/${roomCode}/ws?playerId=${playerId}${phoneQuery}`)
       socket.current = ws
       ws.onopen = () => {
         retryAttempt = 0
@@ -57,6 +58,7 @@ export function useGameSocket(roomCode: string | null, playerId: string | null) 
         if (event.type === 'game.state') {
           setGame(event.state)
           if (event.state.phase === 'WordSelection') {
+            setOperations([])
             setWord(null)
             setWordDifficulty(null)
             setReveal(null)
@@ -81,7 +83,7 @@ export function useGameSocket(roomCode: string | null, playerId: string | null) 
       socket.current = null
       setConnected(false)
     }
-  }, [roomCode, playerId])
+  }, [roomCode, playerId, phoneConnection])
 
   const send = useCallback((payload: object) => {
     const message = JSON.stringify(payload)

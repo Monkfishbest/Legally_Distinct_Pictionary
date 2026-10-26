@@ -97,5 +97,16 @@ input:focus { border-color: #ff6565; }
 .game-shell.landing .home-custom-words .error { color: #ffd6d6; }
 .game-shell.landing .home-custom-words .success { color: #b8ffd3 !important; }
 .game-shell.landing .home-custom-words .secondary { background: #ffca24; color: #173c8d; }
+.winner-screen { display: grid; align-content: center; justify-items: center; gap: 18px; text-align: center; }
+.winner-screen > .brand { align-self: start; justify-self: start; }
+.winner-card { display: grid; justify-items: center; gap: 10px; width: min(100%, 560px); padding: 42px 32px; background: #1268d5; border: 5px solid #ffca24; box-shadow: 5px 6px 0 #073d9f; animation: reveal-enter .8s ease-out both; }
+.winner-trophy { font-size: 64px; animation: reveal-pop .8s .2s ease-out both; }
+.winner-card .eyebrow { color: #ffe45a; }
+.winner-card h1 { color: #fff; text-shadow: 3px 4px #0752b8; }
+.winner-card > strong { color: #ffe45a; font: 22px 'DM Mono'; }
+.winner-standings { display: grid; gap: 7px; width: min(100%, 360px); margin: 12px 0; }
+.winner-standings div { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; padding: 9px 12px; color: #fff; background: #0757bd; text-align: left; }
+.winner-standings span { color: #ffe45a; font-family: 'DM Mono'; }
+.winner-standings div > strong { color: #ffe45a; }
 @media (max-width: 900px) { .game-layout { grid-template-columns: 120px minmax(0, 1fr) 165px; gap: 12px; }.game-shell .sidebar { padding: 9px 7px; }.game-shell .player-row { grid-template-columns: 24px 1fr auto; gap: 5px; font-size: 12px; }.game-shell .avatar { width: 24px; height: 24px; }.round-panel { margin-top: 50px; } }
 @media (max-width: 680px) { .game-layout { grid-template-columns: 1fr; }.round-panel { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 8px; transform: none; }.round-panel .round-timer { display: flex; align-items: center; gap: 8px; }.round-panel > strong { padding: 4px 8px; }.game-shell .sidebar { display: flex; flex-wrap: wrap; gap: 4px 12px; transform: none; }.game-shell .score-head { width: 100%; margin-bottom: 2px; }.game-shell .player-row { margin: 4px 0; }.game-shell .reveal { grid-template-columns: 1fr; }.game-shell .reveal-drawing .canvas-board { max-height: 220px; }.game-shell .phone-qr { display: none; } }

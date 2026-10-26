@@ -87,7 +87,8 @@ export function useGameSocket(roomCode: string | null, playerId: string | null, 
 
   const send = useCallback((payload: object) => {
     const message = JSON.stringify(payload)
-    if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(message)
+    const currentSocket = socket.current
+    if (currentSocket?.readyState === WebSocket.OPEN) currentSocket.send(message)
     else {
       pendingMessages.current = [...pendingMessages.current.slice(-19), message]
       setError('Connection interrupted. Reconnecting...')

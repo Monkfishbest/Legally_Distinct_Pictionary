@@ -25,7 +25,12 @@ export const joinRoom = (code: string, name: string) =>
 export const getRoom = (code: string) => request<Room>(`/api/rooms/${encodeURIComponent(code)}`)
 
 export const getGallery = (gameId: string) =>
-  request<GalleryItem[]>(`/api/games/${encodeURIComponent(gameId)}/gallery`)
+  request<GalleryItem[]>(`/api/games/${encodeURIComponent(gameId)}/gallery`).then(items =>
+    items.map(item => ({
+      ...item,
+      imageUrl: item.imageUrl.startsWith('http') ? item.imageUrl : `${apiBase}${item.imageUrl}`,
+    }))
+  )
 
 export async function uploadFinishedImage(gameId: string, turnNumber: number, playerId: string, blob: Blob) {
   const response = await fetch(`${apiBase}/api/games/${encodeURIComponent(gameId)}/turns/${turnNumber}/image?playerId=${encodeURIComponent(playerId)}`, {

@@ -1,7 +1,9 @@
 import type { GalleryItem, Room } from './types'
 
+const apiBase = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options })
+  const response = await fetch(`${apiBase}${path}`, { headers: { 'Content-Type': 'application/json' }, ...options })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`)
   return body as T
@@ -26,7 +28,7 @@ export const getGallery = (gameId: string) =>
   request<GalleryItem[]>(`/api/games/${encodeURIComponent(gameId)}/gallery`)
 
 export async function uploadFinishedImage(gameId: string, turnNumber: number, playerId: string, blob: Blob) {
-  const response = await fetch(`/api/games/${encodeURIComponent(gameId)}/turns/${turnNumber}/image?playerId=${encodeURIComponent(playerId)}`, {
+  const response = await fetch(`${apiBase}/api/games/${encodeURIComponent(gameId)}/turns/${turnNumber}/image?playerId=${encodeURIComponent(playerId)}`, {
     method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob,
   })
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error ?? 'Image upload failed')

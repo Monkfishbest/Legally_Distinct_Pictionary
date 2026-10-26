@@ -15,8 +15,10 @@ export function useGameSocket(roomCode: string | null, playerId: string | null) 
 
   useEffect(() => {
     if (!roomCode || !playerId) return
+    const configuredWsUrl = (import.meta.env.VITE_WS_URL ?? '').replace(/\/$/, '')
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${protocol}://${window.location.host}/api/rooms/${roomCode}/ws?playerId=${playerId}`)
+    const wsOrigin = configuredWsUrl || `${protocol}://${window.location.host}`
+    const ws = new WebSocket(`${wsOrigin}/api/rooms/${roomCode}/ws?playerId=${playerId}`)
     socket.current = ws
     ws.onopen = () => { setConnected(true); setError(null) }
     ws.onclose = () => setConnected(false)

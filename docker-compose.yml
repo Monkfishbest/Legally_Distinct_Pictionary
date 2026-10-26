@@ -7,6 +7,8 @@ services:
       - "5173:5173"
     environment:
       VITE_PUBLIC_URL: ${VITE_PUBLIC_URL:-http://localhost:5173}
+      VITE_API_URL: ${VITE_API_URL:-}
+      VITE_WS_URL: ${VITE_WS_URL:-}
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules

@@ -114,7 +114,13 @@ final class RoomHub @Inject() (
                               broadcast(roomCode, GameEvent.timer(deadline))
                               countdownScheduler.schedule(
                                 new Runnable:
-                                  def run(): Unit = endTimedOutTurn(roomCode, updated.artist.map(_.id).getOrElse(""))
+                                  def run(): Unit =
+                                    broadcast(roomCode, GameEvent.timeout)
+                                    countdownScheduler.schedule(
+                                      new Runnable:
+                                        def run(): Unit = endTimedOutTurn(roomCode, updated.artist.map(_.id).getOrElse(""))
+                                      , 5, TimeUnit.SECONDS
+                                    )
                                 , updated.settings.turnDurationSeconds.toLong, TimeUnit.SECONDS
                               )
                         , 5, TimeUnit.SECONDS
@@ -127,7 +133,8 @@ final class RoomHub @Inject() (
             }.andThen { case _ => selectionInFlight.remove(normalizedRoomCode) }
 
           case drawing: DrawingOperationCommand =>
-            roomService.applyDrawing(roomCode, drawing) match
+            if turnHasExpired(roomCode) then broadcast(roomCode, GameEvent.error(GameError.DrawingNotAllowed))
+            else roomService.applyDrawing(roomCode, drawing) match
               case Left(error) => broadcast(roomCode, GameEvent.error(error))
               case Right(operation) => broadcast(roomCode, GameEvent.drawingOperation(operation))
 
@@ -172,7 +179,10 @@ final class RoomHub @Inject() (
 
   private def canEndTurn(roomCode: String): Boolean =
     roomService.currentState(roomCode).exists: state =>
-      state.confirmedPlayerIds.nonEmpty
+      state.confirmedPlayerIds.nonEmpty || turnHasExpired(roomCode)
+
+  private def turnHasExpired(roomCode: String): Boolean =
+    turnDeadlines.get(roomCode.trim.toUpperCase).exists(_ <= System.currentTimeMillis())
 
   private def endTimedOutTurn(roomCode: String, artistId: String): Unit =
     roomService.execute(roomCode, EndTurn(artistId)) match

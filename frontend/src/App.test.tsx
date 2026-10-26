@@ -28,21 +28,28 @@ describe('turn controls', () => {
   })
 
   it('never offers the artist as a correct guess', () => {
-    render(<TurnActions isArtist forceSelection players={players} confirmed={[]} artistId="artist" onConfirm={() => undefined} />)
+    render(<TurnActions isArtist showSelection forceSelection players={players} confirmed={[]} artistId="artist" onConfirm={() => undefined} />)
     expect(screen.queryByRole('button', { name: 'Artist' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Alex' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sam' })).toBeInTheDocument()
   })
 
   it('does not offer an early end-turn button', () => {
-    render(<TurnActions isArtist forceSelection={false} players={players} confirmed={[]} artistId="artist" onOpenSelection={() => undefined} onConfirm={() => undefined} />)
-    fireEvent.click(screen.getByRole('button', { name: /Someone guessed it/i }))
+    render(<TurnActions isArtist showSelection forceSelection={false} players={players} confirmed={[]} artistId="artist" onOpenSelection={() => undefined} onCancel={() => undefined} onConfirm={() => undefined} />)
+    expect(screen.getByRole('button', { name: /Whoops.*no one guessed it/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /End turn/i })).not.toBeInTheDocument()
+  })
+
+  it('allows cancelling a mistaken guess report', () => {
+    const onCancel = vi.fn()
+    render(<TurnActions isArtist showSelection forceSelection={false} players={players} confirmed={[]} artistId="artist" onCancel={onCancel} onConfirm={() => undefined} />)
+    fireEvent.click(screen.getByRole('button', { name: /Whoops.*no one guessed it/i }))
+    expect(onCancel).toHaveBeenCalledOnce()
   })
 
   it('confirms a selected player and excludes confirmed players', () => {
     const onConfirm = vi.fn()
-    render(<TurnActions isArtist forceSelection players={players} confirmed={['guess-1']} artistId="artist" onConfirm={onConfirm} />)
+    render(<TurnActions isArtist showSelection forceSelection={false} players={players} confirmed={['guess-1']} artistId="artist" onConfirm={onConfirm} />)
     expect(screen.queryByRole('button', { name: 'Alex' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sam' }))
     expect(onConfirm).toHaveBeenCalledWith('guess-2')

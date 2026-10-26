@@ -109,6 +109,15 @@ describe('useGameSocket', () => {
     expect(result.current.countdown).toBeNull()
   })
 
+  it('marks the artist turn as timed out when the server announces it', () => {
+    const { result } = renderHook(() => useGameSocket('ABC123', 'player-1'))
+    const ws = MockWebSocket.instances[0]
+    act(() => ws.open())
+    act(() => ws.receive({ type: 'turn.timeout' }))
+    expect(result.current.timedOut).toBe(true)
+    expect(result.current.countdown).toBeNull()
+  })
+
   it('queues a command during a disconnect and sends it after reconnecting', () => {
     vi.useFakeTimers()
     const { result } = renderHook(() => useGameSocket('ABC123', 'player-1', true))

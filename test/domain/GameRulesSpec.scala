@@ -38,6 +38,12 @@ final class GameRulesSpec extends FunSuite:
 
     assert(hard.players.find(_.id == "player-2").get.score > simple.players.find(_.id == "player-2").get.score)
 
+  test("remaining time adds a larger bonus to earlier correct guesses"):
+    val early = GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 5).toOption.get
+    val late = GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 50).toOption.get
+
+    assert(early.players.find(_.id == "player-2").get.score > late.players.find(_.id == "player-2").get.score)
+
   test("cannot confirm the same player twice"):
     val state = drawingState()
     val confirmed = GameRules.confirmPlayer(state, "player-2", elapsedSeconds = 10).toOption.get

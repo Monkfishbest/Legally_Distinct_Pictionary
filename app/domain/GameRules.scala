@@ -5,6 +5,7 @@ object GameRules:
   val artistParticipationPoints: Int = 50
   val placementBonus: Int = 25
   val placementBonusStep: Int = 5
+  val timeBonusPerRemainingSecond: Int = 1
 
   def startGame(state: GameState): Either[GameError, GameState] =
     state match
@@ -126,13 +127,15 @@ object GameRules:
       placement: Int
   ): Int =
     val remainingSeconds = (state.settings.turnDurationSeconds - elapsedSeconds).max(0)
-    val remainingRatio = BigDecimal(remainingSeconds) / state.settings.turnDurationSeconds
     val multiplier = state.difficulty.map(_.multiplier).getOrElse(BigDecimal(1))
-    val timeScore = (BigDecimal(baseConfirmedPlayerPoints) * multiplier * remainingRatio)
+    val baseScore = (BigDecimal(baseConfirmedPlayerPoints) * multiplier)
+      .setScale(0, BigDecimal.RoundingMode.HALF_UP)
+      .toInt
+    val timeBonus = (BigDecimal(remainingSeconds * timeBonusPerRemainingSecond) * multiplier)
       .setScale(0, BigDecimal.RoundingMode.HALF_UP)
       .toInt
 
-    timeScore + (placementBonus - ((placement - 1) * placementBonusStep)).max(0)
+    baseScore + timeBonus + (placementBonus - ((placement - 1) * placementBonusStep)).max(0)
 
   private def addScore(state: GameState, playerId: String, points: Int): GameState =
     state.copy(

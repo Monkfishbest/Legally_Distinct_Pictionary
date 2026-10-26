@@ -10,8 +10,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const createRoom = (name: string, settings?: { turnDurationSeconds: number; turnsPerPlayer: number }) =>
   request<Room>('/api/rooms', { method: 'POST', body: JSON.stringify({ name, ...settings }) })
 
-export const createCustomWord = (roomCode: string, text: string, difficulty: string) =>
-  request(`/api/rooms/${encodeURIComponent(roomCode)}/words`, {
+export const createCustomWord = (text: string, difficulty: string) =>
+  request('/api/words', {
     method: 'POST', body: JSON.stringify({ text, difficulty }),
   })
 

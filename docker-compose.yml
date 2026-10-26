@@ -22,9 +22,9 @@ services:
       - "9000:9000"
     environment:
       PLAY_HTTP_SECRET: development-only-secret-change-me
-      PICTIONARY_DB_URL: jdbc:postgresql://postgres:5432/pictionary
-      PICTIONARY_DB_USER: pictionary
-      PICTIONARY_DB_PASSWORD: pictionary-development-only
+      PICTIONARY_DB_URL: ${PICTIONARY_DB_URL:-jdbc:postgresql://postgres:5432/pictionary}
+      PICTIONARY_DB_USER: ${PICTIONARY_DB_USER:-pictionary}
+      PICTIONARY_DB_PASSWORD: ${PICTIONARY_DB_PASSWORD:-pictionary-development-only}
       PICTIONARY_MEDIA_DIRECTORY: /data/media
     volumes:
       - .:/workspace

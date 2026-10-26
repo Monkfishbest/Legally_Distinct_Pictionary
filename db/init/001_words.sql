@@ -7,8 +7,7 @@ CREATE TABLE IF NOT EXISTS words (
     room_id VARCHAR(100),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((source = 'BuiltIn' AND room_id IS NULL) OR (source = 'Custom' AND room_id IS NOT NULL)),
-    UNIQUE (room_id, normalized_text, difficulty)
+    UNIQUE (normalized_text, difficulty, source)
 );
 
 CREATE INDEX IF NOT EXISTS words_selection_idx

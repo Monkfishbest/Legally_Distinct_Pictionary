@@ -20,21 +20,21 @@ final class WordController @Inject() (
 )(using ExecutionContext)
     extends AbstractController(controllerComponents):
 
-  def list(roomId: String, difficulty: String): Action[AnyContent] = Action.async:
+  def list(difficulty: String): Action[AnyContent] = Action.async:
     parseDifficulty(difficulty) match
       case None => Future.successful(BadRequest(Json.obj("error" -> "Unknown difficulty")))
       case Some(parsedDifficulty) =>
-        wordRepository.findEligible(roomId, parsedDifficulty).map:
+        wordRepository.findEligible("global", parsedDifficulty).map:
           words => Ok(Json.toJson(words.map(toJson)))
 
-  def create(roomId: String): Action[JsValue] = Action.async(parse.json):
+  def create: Action[JsValue] = Action.async(parse.json):
     _.body.validate[CreateWordRequest].fold(
       errors => Future.successful(BadRequest(Json.obj("error" -> JsError.toJson(errors)))),
       request =>
         parseDifficulty(request.difficulty) match
           case None => Future.successful(BadRequest(Json.obj("error" -> "Unknown difficulty")))
           case Some(difficulty) =>
-            wordRepository.createCustom(roomId, request.text, difficulty).map:
+            wordRepository.createCustom(request.text, difficulty).map:
               case Right(word) => Created(toJson(word))
               case Left(GameError.InvalidWord(reason)) => BadRequest(Json.obj("error" -> reason))
               case Left(_) => InternalServerError(Json.obj("error" -> "Could not create word"))

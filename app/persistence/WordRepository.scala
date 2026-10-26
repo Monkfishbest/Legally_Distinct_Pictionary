@@ -10,7 +10,7 @@ import javax.inject.Inject
 
 trait WordRepository:
   def findEligible(roomId: String, difficulty: WordDifficulty): Future[Vector[Word]]
-  def createCustom(roomId: String, displayText: String, difficulty: WordDifficulty): Future[Either[GameError, Word]]
+  def createCustom(displayText: String, difficulty: WordDifficulty): Future[Either[GameError, Word]]
 
 final class JdbcWordRepository @Inject() (
     configuration: Configuration,
@@ -23,7 +23,7 @@ final class JdbcWordRepository @Inject() (
 
   private def connection(): Connection = DriverManager.getConnection(url, user, password)
 
-  override def findEligible(roomId: String, difficulty: WordDifficulty): Future[Vector[Word]] = Future:
+  override def findEligible(_roomId: String, difficulty: WordDifficulty): Future[Vector[Word]] = Future:
     using(connection()) { connection =>
       val statement = connection.prepareStatement(
         """
@@ -31,12 +31,11 @@ final class JdbcWordRepository @Inject() (
           |FROM words
           |WHERE active = TRUE
           |  AND difficulty = ?
-          |  AND (source = 'BuiltIn' OR room_id = ?)
+          |  AND source IN ('BuiltIn', 'Custom')
           |ORDER BY display_text
           |""".stripMargin
       )
       statement.setString(1, difficulty.toString)
-      statement.setString(2, roomId)
       using(statement) { statement =>
         using(statement.executeQuery()) { results =>
           Iterator
@@ -49,7 +48,6 @@ final class JdbcWordRepository @Inject() (
     }
 
   override def createCustom(
-      roomId: String,
       displayText: String,
       difficulty: WordDifficulty
   ): Future[Either[GameError, Word]] = Future:
@@ -58,33 +56,44 @@ final class JdbcWordRepository @Inject() (
       displayText,
       difficulty,
       WordSource.Custom,
-      roomId = Some(roomId)
+      roomId = None
     )
 
     WordSelection.validate(candidate) match
       case invalid @ Left(_) => invalid
       case Right(validWord) =>
         try
-          using(connection()) { connection =>
-            val statement = connection.prepareStatement(
-              """
-                |INSERT INTO words (id, display_text, normalized_text, difficulty, source, room_id)
-                |VALUES (?, ?, ?, ?, 'Custom', ?)
-                |""".stripMargin
+          val storedWord = using(connection()) { connection =>
+            val existingStatement = connection.prepareStatement(
+              "SELECT id, display_text, difficulty, source, room_id, active FROM words WHERE source = 'Custom' AND normalized_text = ? AND difficulty = ? LIMIT 1"
             )
-            using(statement) { statement =>
-              statement.setObject(1, UUID.fromString(validWord.id))
-              statement.setString(2, validWord.displayText)
-              statement.setString(3, validWord.normalizedText)
-              statement.setString(4, validWord.difficulty.toString)
-              statement.setString(5, roomId)
-              statement.executeUpdate()
+            val existing = using(existingStatement) { statement =>
+              statement.setString(1, validWord.normalizedText)
+              statement.setString(2, validWord.difficulty.toString)
+              using(statement.executeQuery()) { results =>
+                if results.next() then Some(readWord(results)) else None
+              }
             }
+            existing.getOrElse:
+              val statement = connection.prepareStatement(
+                """
+                  |INSERT INTO words (id, display_text, normalized_text, difficulty, source, room_id)
+                  |VALUES (?, ?, ?, ?, 'Custom', NULL)
+                  |""".stripMargin
+              )
+              using(statement) { statement =>
+                statement.setObject(1, UUID.fromString(validWord.id))
+                statement.setString(2, validWord.displayText)
+                statement.setString(3, validWord.normalizedText)
+                statement.setString(4, validWord.difficulty.toString)
+                statement.executeUpdate()
+              }
+              validWord
           }
-          Right(validWord)
+          Right(storedWord)
         catch
           case _: java.sql.SQLException =>
-            Left(GameError.InvalidWord("That custom word already exists in this room"))
+            Left(GameError.InvalidWord("That custom word already exists"))
 
   private def readWord(results: ResultSet): Word =
     Word(

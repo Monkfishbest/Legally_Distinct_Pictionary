@@ -22,7 +22,6 @@ export default function App() {
   const [mode, setMode] = useState<'create' | 'join'>('create')
   const [turnDurationSeconds, setTurnDurationSeconds] = useState(60)
   const [turnsPerPlayer, setTurnsPerPlayer] = useState(1)
-  const [customRoomCode, setCustomRoomCode] = useState('')
   const [customWord, setCustomWord] = useState('')
   const [customDifficulty, setCustomDifficulty] = useState<Difficulty>('Simple')
   const [customMessage, setCustomMessage] = useState<string | null>(null)
@@ -35,7 +34,7 @@ export default function App() {
   }
 
   const submitHomeWord = async () => {
-    try { await createCustomWord(customRoomCode, customWord, customDifficulty); setCustomWord(''); setCustomMessage('Custom word added to the room.') }
+    try { await createCustomWord(customWord, customDifficulty); setCustomWord(''); setCustomMessage('Custom word added to the shared word pool.') }
     catch (caught) { setCustomMessage(caught instanceof Error ? caught.message : 'Could not add custom word') }
   }
 
@@ -51,7 +50,7 @@ export default function App() {
       <button className="primary" onClick={enter} disabled={!name.trim() || (mode === 'join' && code.length !== 6)}>{mode === 'create' ? 'Create room' : 'Join room'} <span>→</span></button>
       {error && <p className="error">{error}</p>}
     </div>
-    <div className="home-custom-words"><p className="eyebrow">SUBMIT A CUSTOM WORD</p><p>Add a word to an existing room before the game starts.</p><div><input value={customRoomCode} onChange={event => setCustomRoomCode(event.target.value.toUpperCase())} placeholder="ROOM CODE" maxLength={6} /><input value={customWord} onChange={event => setCustomWord(event.target.value)} placeholder="Custom word" maxLength={100} /><select value={customDifficulty} onChange={event => setCustomDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={customRoomCode.length !== 6 || !customWord.trim()} onClick={submitHomeWord}>Add word</button></div>{customMessage && <small>{customMessage}</small>}</div>
+    <div className="home-custom-words"><p className="eyebrow">SUBMIT A CUSTOM WORD</p><p>Add a word to the shared pool for everyone to use in future games.</p><div><input value={customWord} onChange={event => setCustomWord(event.target.value)} placeholder="Custom word" maxLength={100} /><select value={customDifficulty} onChange={event => setCustomDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!customWord.trim()} onClick={submitHomeWord}>Add word</button></div>{customMessage && <small>{customMessage}</small>}</div>
   </main>
 
   return <GameRoom room={room} onError={setError} />
@@ -97,15 +96,16 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
   return <main className="shell game-shell">
     <header className="topbar"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><div className="room-pill">ROOM <strong>{room.code}</strong><button onClick={() => navigator.clipboard?.writeText(room.code)}>copy</button></div>{timeLeft !== null && <div className={`round-timer ${timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><strong>{formatTime(timeLeft)}</strong></div>}<div className="phone-qr"><QRCodeSVG value={phoneUrl} size={54} /><span>SCAN FOR PHONE</span></div><div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
     <section className="game-layout">
-      <aside className="sidebar"><div className="score-head"><span>PLAYERS</span><span>SCORE</span></div>{players.map(player => <div className={`player-row ${player.id === game?.artistId ? 'artist' : ''}`} key={player.id}><span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span><span>{player.name}{player.id === room.currentPlayerId && <small> YOU</small>}{player.id === game?.artistId && <b>✎</b>}</span><strong>{player.score}</strong></div>)}<div className="sidebar-bottom"><p>TURN</p><strong>{game?.turnNumber ?? 0}</strong><span>/ {room.settings.turnsPerPlayer * players.length}</span></div></aside>
+      <aside className="round-panel"><span className="round-label">ROUND</span><strong>{game?.turnNumber ?? 0}<small> / {room.settings.turnsPerPlayer * players.length}</small></strong><div className={`round-timer ${timeLeft !== null && timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><b>{timeLeft === null ? '--:--' : formatTime(timeLeft)}</b></div>{game?.difficulty && <span className="round-points">{game.difficulty} round</span>}</aside>
       <section className="board-area">
         <div className="phase-bar"><div><span className="eyebrow">{phase === 'Lobby' ? 'WAITING ROOM' : `TURN ${game?.turnNumber ?? 0}`}</span><h2>{phaseTitle(phase, false)}</h2></div></div>
         {phase === 'Lobby' && <Lobby room={currentRoom} isOwner={isOwner} phoneUrl={phoneUrl} onStart={() => send('game.start')} />}
         {phase === 'WordSelection' && <DifficultyPicker isArtist={false} options={[]} onChoose={() => undefined} />}
         {(phase === 'Drawing' || phase === 'TurnComplete') && <><div className="canvas-wrap"><CanvasBoard operations={socket.operations} canDraw={false} color="#171923" width={8} onOperation={() => undefined} /></div><div className="display-note">The artist is drawing from their phone.</div></>}
         {phase === 'Drawing' && <div className="waiting-note">The artist controls the word, correct guesses, and end of turn from their phone.</div>}
-        {phase === 'TurnComplete' && socket.reveal && <Reveal reveal={socket.reveal} />}
+        {phase === 'TurnComplete' && socket.reveal && <Reveal reveal={socket.reveal} operations={socket.operations} />}
       </section>
+      <aside className="sidebar"><div className="score-head"><span>PLAYERS</span><span>SCORE</span></div>{players.map(player => <div className={`player-row ${player.id === game?.artistId ? 'artist' : ''}`} key={player.id}><span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span><span>{player.name}{player.id === room.currentPlayerId && <small> YOU</small>}{player.id === game?.artistId && <b>✎</b>}</span><strong>{player.score}</strong></div>)}</aside>
     </section>
     {socket.error && <div className="toast error">{socket.error}</div>}
     <div className="me-label">Playing as <strong>{me?.name}</strong></div>
@@ -117,7 +117,7 @@ function Lobby({ room, isOwner, phoneUrl, onStart }: { room: Room; isOwner: bool
   const [difficulty, setDifficulty] = useState<Difficulty>('Simple')
   const [wordMessage, setWordMessage] = useState<string | null>(null)
   const submitWord = async () => {
-    try { await createCustomWord(room.code, word, difficulty); setWord(''); setWordMessage('Custom word added to this room.') }
+    try { await createCustomWord(word, difficulty); setWord(''); setWordMessage('Custom word added to the shared word pool.') }
     catch (error) { setWordMessage(error instanceof Error ? error.message : 'Could not add custom word') }
   }
   return <div className="lobby"><div className="lobby-icon">✦</div><h3>Invite your people</h3><p>Share the room code, then scan the QR code on the painter’s phone.</p><div className="big-code">{room.code}</div><div className="qr-card"><QRCodeSVG value={phoneUrl} size={124} bgColor="#fffdf8" fgColor="#10131c" /><small>SCAN TO CONTROL THE GAME</small></div><button className="primary" disabled={!isOwner || room.players.length < 2} onClick={onStart}>{room.players.length < 2 ? 'Waiting for players...' : 'Start game →'}</button><div className="custom-word-form"><p className="eyebrow">ADD A CUSTOM WORD</p><input value={word} onChange={event => setWord(event.target.value)} placeholder="e.g. family inside joke" maxLength={100} /><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!word.trim()} onClick={submitWord}>Add word</button>{wordMessage && <small>{wordMessage}</small>}</div></div>
@@ -221,8 +221,8 @@ function TurnActions({ isArtist, forceSelection, players, confirmed, artistId, o
   return <div className="waiting-note">The artist controls guesses and the end of this turn.</div>
 }
 
-function Reveal({ reveal }: { reveal: { word: string; difficulty: string; correct: boolean } }) {
-  return <div className={`reveal ${reveal.correct ? 'reveal-correct' : 'reveal-incorrect'}`}><div className="reveal-confetti">{reveal.correct ? '🎉' : '💨'}</div><p className="eyebrow">{reveal.correct ? 'CORRECT GUESS' : 'TIME’S UP'}</p><h3>{reveal.correct ? 'Party time!' : 'Nobody got it.'}</h3><strong>{reveal.word}</strong><small>{reveal.difficulty}</small></div>
+function Reveal({ reveal, operations }: { reveal: { word: string; difficulty: string; correct: boolean }; operations: import('./types').DrawingOperation[] }) {
+  return <div className={`reveal ${reveal.correct ? 'reveal-correct' : 'reveal-incorrect'}`}><div className="reveal-drawing"><CanvasBoard operations={operations} canDraw={false} color="#171923" width={8} onOperation={() => undefined} /></div><div className="reveal-answer"><div className="reveal-confetti">{reveal.correct ? '🎉' : '💨'}</div><p className="eyebrow">THE WORD WAS:</p><strong>{reveal.word}</strong><small>{reveal.difficulty}</small><h3>{reveal.correct ? 'Party time!' : 'Nobody got it.'}</h3></div></div>
 }
 
 function playRevealSound(correct: boolean) {

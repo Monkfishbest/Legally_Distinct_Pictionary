@@ -18,15 +18,12 @@ object WordSelection:
       case word if normalized.exists(_.isControl) =>
         Left(GameError.InvalidWord("Word cannot contain control characters"))
 
-      case word if word.source == WordSource.Custom && word.roomId.isEmpty =>
-        Left(GameError.InvalidWord("Custom words must belong to a room"))
-
       case word => Right(word.copy(displayText = word.displayText.trim))
 
   def eligible(
       words: Vector[Word],
       difficulty: WordDifficulty,
-      roomId: String,
+      _roomId: String,
       includeBuiltIn: Boolean = true,
       includeCustom: Boolean = true
   ): Vector[Word] =
@@ -35,7 +32,7 @@ object WordSelection:
         word.active &&
           word.difficulty == difficulty &&
           ((includeBuiltIn && word.source == WordSource.BuiltIn) ||
-            (includeCustom && word.source == WordSource.Custom && word.roomId.contains(roomId)))
+            (includeCustom && word.source == WordSource.Custom))
 
   def choose(
       words: Vector[Word],

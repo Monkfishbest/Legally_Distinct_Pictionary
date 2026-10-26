@@ -14,7 +14,7 @@ final class WordSelectionSpec extends FunSuite:
     roomId = Some("room-1")
   )
 
-  test("selects built-in and room custom words for the chosen difficulty"):
+  test("selects built-in and custom words for the chosen difficulty"):
     val selected = WordSelection.choose(
       Vector(builtIn, custom),
       WordDifficulty.Simple,
@@ -24,7 +24,7 @@ final class WordSelectionSpec extends FunSuite:
 
     assert(selected.isRight)
 
-  test("does not include another room's custom words"):
+  test("custom words are available in every room"):
     val selected = WordSelection.choose(
       Vector(custom),
       WordDifficulty.Simple,
@@ -32,15 +32,12 @@ final class WordSelectionSpec extends FunSuite:
       Random(0)
     )
 
-    assertEquals(selected, Left(GameError.NoWordsAvailable(WordDifficulty.Simple)))
+    assert(selected.isRight)
 
   test("normalizes valid words"):
     assertEquals(custom.normalizedText, "space ship")
 
-  test("requires custom words to belong to a room"):
+  test("allows global custom words without a room"):
     val invalid = Word("3", "Tree", WordDifficulty.Simple, WordSource.Custom)
 
-    assertEquals(
-      WordSelection.validate(invalid),
-      Left(GameError.InvalidWord("Custom words must belong to a room"))
-    )
+    assert(WordSelection.validate(invalid).isRight)

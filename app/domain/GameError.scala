@@ -9,6 +9,8 @@ enum GameError:
   case PlayerAlreadyConfirmed(playerId: String)
   case DifficultyNotSelected
   case InvalidWord(reason: String)
+  case DuplicateWord
+  case DatabaseUnavailable
   case NoWordsAvailable(difficulty: WordDifficulty)
   case InvalidRoomCode
   case PlayerNameRequired

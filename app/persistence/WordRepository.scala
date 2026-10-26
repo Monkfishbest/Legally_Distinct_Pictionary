@@ -92,8 +92,10 @@ final class JdbcWordRepository @Inject() (
           }
           Right(storedWord)
         catch
+          case error: java.sql.SQLException if error.getSQLState == "23505" =>
+            Left(GameError.DuplicateWord)
           case _: java.sql.SQLException =>
-            Left(GameError.InvalidWord("That custom word already exists"))
+            Left(GameError.DatabaseUnavailable)
 
   private def readWord(results: ResultSet): Word =
     Word(

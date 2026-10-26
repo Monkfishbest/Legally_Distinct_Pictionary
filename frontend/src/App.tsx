@@ -8,6 +8,7 @@ import './styles.css'
 
 const difficulties: Difficulty[] = ['Simple', 'Medium', 'Hard', 'Impossible']
 const publicOrigin = import.meta.env.VITE_PUBLIC_URL ?? window.location.origin
+type WordMessage = { text: string; success: boolean }
 
 export default function App() {
   const phoneParams = new URLSearchParams(window.location.search)
@@ -20,22 +21,28 @@ export default function App() {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'create' | 'join'>('create')
-  const [turnDurationSeconds, setTurnDurationSeconds] = useState(60)
-  const [turnsPerPlayer, setTurnsPerPlayer] = useState(1)
+  const [turnDurationSeconds, setTurnDurationSeconds] = useState('60')
+  const [turnsPerPlayer, setTurnsPerPlayer] = useState('1')
   const [customWord, setCustomWord] = useState('')
   const [customDifficulty, setCustomDifficulty] = useState<Difficulty>('Simple')
-  const [customMessage, setCustomMessage] = useState<string | null>(null)
+  const [customMessage, setCustomMessage] = useState<WordMessage | null>(null)
 
   const enter = async () => {
     try {
       setError(null)
-      setRoom(mode === 'create' ? await createRoom(name, { turnDurationSeconds, turnsPerPlayer }) : await joinRoom(code, name))
+      const seconds = Number(turnDurationSeconds)
+      const rounds = Number(turnsPerPlayer)
+      if (mode === 'create' && (!Number.isInteger(seconds) || seconds < 10 || seconds > 600 || !Number.isInteger(rounds) || rounds < 1 || rounds > 20)) {
+        setError('Use 10–600 seconds and 1–20 rounds per player')
+        return
+      }
+      setRoom(mode === 'create' ? await createRoom(name, { turnDurationSeconds: seconds, turnsPerPlayer: rounds }) : await joinRoom(code, name))
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not join room') }
   }
 
   const submitHomeWord = async () => {
-    try { await createCustomWord(customWord, customDifficulty); setCustomWord(''); setCustomMessage('Custom word added to the shared word pool.') }
-    catch (caught) { setCustomMessage(caught instanceof Error ? caught.message : 'Could not add custom word') }
+    try { await createCustomWord(customWord, customDifficulty); setCustomWord(''); setCustomMessage({ text: 'Custom word added to the shared word pool.', success: true }) }
+    catch (caught) { setCustomMessage({ text: caught instanceof Error ? caught.message : 'Could not add custom word', success: false }) }
   }
 
   if (!room) return <main className="shell landing">
@@ -44,13 +51,13 @@ export default function App() {
     <h1>Make the room.<br /><em>Make the picture.</em></h1>
     <div className="entry-card">
       <div className="tabs"><button className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}>Create room</button><button className={mode === 'join' ? 'active' : ''} onClick={() => setMode('join')}>Join room</button></div>
-      <label>Your name<input value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Alex" maxLength={30} /></label>
-      {mode === 'join' && <label>Room code<input value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="ABC123" maxLength={6} /></label>}
-      {mode === 'create' && <div className="host-settings"><label>Seconds per round<input type="number" min={10} max={600} value={turnDurationSeconds} onChange={event => setTurnDurationSeconds(Number(event.target.value))} /></label><label>Rounds per player<input type="number" min={1} max={20} value={turnsPerPlayer} onChange={event => setTurnsPerPlayer(Number(event.target.value))} /></label></div>}
+      <label>Your name<input value={name} onChange={event => setName(event.target.value)} maxLength={30} /></label>
+      {mode === 'join' && <label>Room code<input value={code} onChange={event => setCode(event.target.value.toUpperCase())} maxLength={6} /></label>}
+      {mode === 'create' && <div className="host-settings"><label>Seconds per round<input type="number" min={10} max={600} value={turnDurationSeconds} onChange={event => setTurnDurationSeconds(event.target.value)} /></label><label>Rounds per player<input type="number" min={1} max={20} value={turnsPerPlayer} onChange={event => setTurnsPerPlayer(event.target.value)} /></label></div>}
       <button className="primary" onClick={enter} disabled={!name.trim() || (mode === 'join' && code.length !== 6)}>{mode === 'create' ? 'Create room' : 'Join room'} <span>→</span></button>
       {error && <p className="error">{error}</p>}
     </div>
-    <div className="home-custom-words"><p className="eyebrow">SUBMIT A CUSTOM WORD</p><p>Add a word to the shared pool for everyone to use in future games.</p><div><input value={customWord} onChange={event => setCustomWord(event.target.value)} placeholder="Custom word" maxLength={100} /><select value={customDifficulty} onChange={event => setCustomDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!customWord.trim()} onClick={submitHomeWord}>Add word</button></div>{customMessage && <small>{customMessage}</small>}</div>
+    <div className="home-custom-words"><p className="eyebrow">SUBMIT A CUSTOM WORD</p><p>Add a word to the shared pool for everyone to use in future games.</p><div><input value={customWord} onChange={event => setCustomWord(event.target.value)} maxLength={100} /><select value={customDifficulty} onChange={event => setCustomDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!customWord.trim()} onClick={submitHomeWord}>Add word</button></div>{customMessage && <small className={customMessage.success ? 'success' : 'error'}>{customMessage.text}</small>}</div>
   </main>
 
   return <GameRoom room={room} onError={setError} />
@@ -115,12 +122,12 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
 function Lobby({ room, isOwner, phoneUrl, onStart }: { room: Room; isOwner: boolean; phoneUrl: string; onStart: () => void }) {
   const [word, setWord] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('Simple')
-  const [wordMessage, setWordMessage] = useState<string | null>(null)
+  const [wordMessage, setWordMessage] = useState<WordMessage | null>(null)
   const submitWord = async () => {
-    try { await createCustomWord(word, difficulty); setWord(''); setWordMessage('Custom word added to the shared word pool.') }
-    catch (error) { setWordMessage(error instanceof Error ? error.message : 'Could not add custom word') }
+    try { await createCustomWord(word, difficulty); setWord(''); setWordMessage({ text: 'Custom word added to the shared word pool.', success: true }) }
+    catch (error) { setWordMessage({ text: error instanceof Error ? error.message : 'Could not add custom word', success: false }) }
   }
-  return <div className="lobby"><div className="lobby-icon">✦</div><h3>Invite your people</h3><p>Share the room code, then scan the QR code on the painter’s phone.</p><div className="big-code">{room.code}</div><div className="qr-card"><QRCodeSVG value={phoneUrl} size={124} bgColor="#fffdf8" fgColor="#10131c" /><small>SCAN TO CONTROL THE GAME</small></div><button className="primary" disabled={!isOwner || room.players.length < 2} onClick={onStart}>{room.players.length < 2 ? 'Waiting for players...' : 'Start game →'}</button><div className="custom-word-form"><p className="eyebrow">ADD A CUSTOM WORD</p><input value={word} onChange={event => setWord(event.target.value)} placeholder="e.g. family inside joke" maxLength={100} /><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!word.trim()} onClick={submitWord}>Add word</button>{wordMessage && <small>{wordMessage}</small>}</div></div>
+  return <div className="lobby"><div className="lobby-icon">✦</div><h3>Invite your people</h3><p>Share the room code, then scan the QR code on the painter’s phone.</p><div className="big-code">{room.code}</div><div className="qr-card"><QRCodeSVG value={phoneUrl} size={124} bgColor="#fffdf8" fgColor="#10131c" /><small>SCAN TO CONTROL THE GAME</small></div><button className="primary" disabled={!isOwner || room.players.length < 2} onClick={onStart}>{room.players.length < 2 ? 'Waiting for players...' : 'Start game →'}</button><div className="custom-word-form"><p className="eyebrow">ADD A CUSTOM WORD</p><input value={word} onChange={event => setWord(event.target.value)} maxLength={100} /><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>{difficulties.map(value => <option key={value}>{value}</option>)}</select><button className="secondary" disabled={!word.trim()} onClick={submitWord}>Add word</button>{wordMessage && <small className={wordMessage.success ? 'success' : 'error'}>{wordMessage.text}</small>}</div></div>
 }
 
 function PhoneController({ roomCode, playerId }: { roomCode: string; playerId: string }) {

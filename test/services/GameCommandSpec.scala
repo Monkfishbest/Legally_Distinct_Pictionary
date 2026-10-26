@@ -11,7 +11,8 @@ final class GameCommandSpec extends FunSuite:
     val (joinedRoom, player) = service.join(room.code, "Bob").toOption.get
 
     val started = service.execute(room.code, StartGame(artist.id)).toOption.get
-    val drawing = service.execute(room.code, ChooseDifficulty(artist.id, WordDifficulty.Hard)).toOption.get
+    service.execute(room.code, ChooseDifficulty(artist.id, WordDifficulty.Hard))
+    val drawing = service.beginDrawing(room.code).toOption.get
     val confirmed = service
       .execute(room.code, ConfirmPlayer(artist.id, player.id, elapsedSeconds = 0))
       .toOption

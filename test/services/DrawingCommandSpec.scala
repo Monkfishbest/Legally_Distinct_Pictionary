@@ -11,6 +11,7 @@ final class DrawingCommandSpec extends FunSuite:
     val (_, player) = service.join(room.code, "Bob").toOption.get
     service.execute(room.code, StartGame(artist.id))
     service.execute(room.code, ChooseDifficulty(artist.id, WordDifficulty.Simple))
+    service.beginDrawing(room.code)
 
     val result = service.applyDrawing(
       room.code,
@@ -38,6 +39,7 @@ final class DrawingCommandSpec extends FunSuite:
     service.join(room.code, "Bob")
     service.execute(room.code, StartGame(artist.id))
     service.execute(room.code, ChooseDifficulty(artist.id, WordDifficulty.Simple))
+    service.beginDrawing(room.code)
 
     val result = service.applyDrawing(
       room.code,
@@ -55,6 +57,7 @@ final class DrawingCommandSpec extends FunSuite:
     service.join(room.code, "Bob")
     service.execute(room.code, StartGame(artist.id))
     service.execute(room.code, ChooseDifficulty(artist.id, WordDifficulty.Simple))
+    service.beginDrawing(room.code)
 
     val result = service.applyDrawing(
       room.code,

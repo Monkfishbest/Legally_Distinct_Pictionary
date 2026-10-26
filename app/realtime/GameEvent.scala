@@ -42,6 +42,9 @@ object GameEvent:
   def countdown(seconds: Int): String =
     Json.obj("type" -> "turn.countdown", "seconds" -> seconds).toString
 
+  def timer(deadlineEpochMs: Long): String =
+    Json.obj("type" -> "turn.timer", "deadlineEpochMs" -> deadlineEpochMs).toString
+
   def wordOptions(words: Vector[Word]): String =
     Json.obj(
       "type" -> "turn.word_options",

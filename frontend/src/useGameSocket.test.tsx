@@ -87,10 +87,25 @@ describe('useGameSocket', () => {
     act(() => ws.receive({ type: 'turn.countdown', seconds: 5 }))
     expect(result.current.countdown).toBe(5)
 
+    act(() => ws.receive({ type: 'turn.timer', deadlineEpochMs: Date.now() + 60000 }))
+    expect(result.current.turnDeadline).toBeGreaterThan(Date.now())
+
     act(() => ws.receive({ type: 'turn.reveal', word: 'Pear', difficulty: 'Simple', correct: true }))
     expect(result.current.reveal).toEqual({ type: 'turn.reveal', word: 'Pear', difficulty: 'Simple', correct: true })
 
     act(() => ws.receive({ type: 'turn.countdown', seconds: 0 }))
+    expect(result.current.countdown).toBeNull()
+  })
+
+  it('does not locally tick the server-owned countdown', () => {
+    vi.useFakeTimers()
+    const { result } = renderHook(() => useGameSocket('ABC123', 'player-1'))
+    const ws = MockWebSocket.instances[0]
+    act(() => ws.open())
+    act(() => ws.receive({ type: 'turn.countdown', seconds: 5 }))
+    act(() => vi.advanceTimersByTime(5000))
+    expect(result.current.countdown).toBe(5)
+    act(() => ws.receive({ type: 'game.state', state: { id: 'game-1', phase: 'Drawing', turnNumber: 1, artistId: 'player-1', difficulty: 'Simple', confirmedPlayerIds: [], players: [] } }))
     expect(result.current.countdown).toBeNull()
   })
 

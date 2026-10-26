@@ -67,6 +67,7 @@ export type ServerEvent =
   | { type: 'drawing.snapshot'; operations: DrawingOperation[] }
   | { type: 'turn.word_assigned'; word: string; difficulty: Difficulty }
   | { type: 'turn.countdown'; seconds: number }
+  | { type: 'turn.timer'; deadlineEpochMs: number }
   | { type: 'turn.word_options'; options: WordOption[] }
   | { type: 'turn.reveal'; word: string; difficulty: Difficulty; correct: boolean }
   | { type: 'error'; error: string }

@@ -12,7 +12,7 @@ final class GameRulesSpec extends FunSuite:
   private def drawingState(difficulty: WordDifficulty = WordDifficulty.Medium): GameState =
     val lobby = GameState("game-1", players)
     val wordSelection = GameRules.startGame(lobby).toOption.get
-    GameRules.chooseDifficulty(wordSelection, difficulty).toOption.get
+    GameRules.chooseDifficulty(wordSelection, difficulty).toOption.get.copy(phase = GamePhase.Drawing)
 
   test("starts a game in word selection phase"):
     val result = GameRules.startGame(GameState("game-1", players))

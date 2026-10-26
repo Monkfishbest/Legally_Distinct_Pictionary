@@ -13,13 +13,8 @@ export function useGameSocket(roomCode: string | null, playerId: string | null, 
   const [reveal, setReveal] = useState<TurnReveal | null>(null)
   const [wordOptions, setWordOptions] = useState<WordOption[]>([])
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [turnDeadline, setTurnDeadline] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (countdown === null) return
-    const timer = window.setInterval(() => setCountdown(value => value === null || value <= 1 ? null : value - 1), 1000)
-    return () => window.clearInterval(timer)
-  }, [countdown])
 
   useEffect(() => {
     if (!roomCode || !playerId) return
@@ -64,12 +59,15 @@ export function useGameSocket(roomCode: string | null, playerId: string | null, 
             setReveal(null)
             setWordOptions([])
             setCountdown(null)
+            setTurnDeadline(null)
           }
+          if (event.state.phase === 'Drawing') setCountdown(null)
         }
         if (event.type === 'drawing.snapshot') setOperations(event.operations)
         if (event.type === 'drawing.operation') setOperations(current => [...current, event.operation])
         if (event.type === 'turn.word_assigned') { setWord(event.word); setWordDifficulty(event.difficulty) }
         if (event.type === 'turn.countdown') setCountdown(event.seconds > 0 ? event.seconds : null)
+        if (event.type === 'turn.timer') setTurnDeadline(event.deadlineEpochMs)
         if (event.type === 'turn.word_options') setWordOptions(event.options)
         if (event.type === 'turn.reveal') setReveal(event)
         if (event.type === 'error') setError(event.error)
@@ -95,5 +93,5 @@ export function useGameSocket(roomCode: string | null, playerId: string | null, 
     }
   }, [])
 
-  return { connected, room, game, operations, word, wordDifficulty, wordOptions, countdown, reveal, error, setError, send }
+  return { connected, room, game, operations, word, wordDifficulty, wordOptions, countdown, turnDeadline, reveal, error, setError, send }
 }

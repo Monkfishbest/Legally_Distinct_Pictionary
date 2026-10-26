@@ -94,12 +94,11 @@ function GameRoom({ room, onError }: { room: Room; onError: (message: string | n
   const phase = game?.phase ?? 'Lobby'
   const players = game?.players ?? currentRoom.players
   const finished = phase === 'Complete'
-  const phoneUrl = `${publicOrigin}/?phone=1&room=${encodeURIComponent(room.code)}&playerId=${encodeURIComponent(game?.artistId ?? room.currentPlayerId ?? '')}`
 
   if (finished && game) return <Gallery gameId={game.id} items={gallery} />
 
   return <main className="shell game-shell">
-    <header className="topbar"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><div className="room-pill">ROOM <strong>{room.code}</strong><button onClick={() => navigator.clipboard?.writeText(room.code)}>copy</button></div>{timeLeft !== null && <div className={`round-timer ${timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><strong>{formatTime(timeLeft)}</strong></div>}<div className="phone-qr"><QRCodeSVG value={phoneUrl} size={54} /><span>SCAN FOR PHONE</span></div><div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
+    <header className="topbar"><div className="brand">LEGALLY DISTINCT <span>PICTIONARY</span></div><div className="room-pill">ROOM <strong>{room.code}</strong><button onClick={() => navigator.clipboard?.writeText(room.code)}>copy</button></div>{timeLeft !== null && <div className={`round-timer ${timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><strong>{formatTime(timeLeft)}</strong></div>}<div className="connection"><i className={socket.connected ? 'online' : ''} /> {socket.connected ? 'Connected' : 'Connecting...'}</div></header>
     <section className="game-layout">
       <aside className="round-panel"><span className="round-label">ROUND</span><strong>{game?.turnNumber ?? 0}<small> / {room.settings.turnsPerPlayer * players.length}</small></strong><div className={`round-timer ${timeLeft !== null && timeLeft <= 10 ? 'urgent' : ''}`}><span>TIME</span><b>{timeLeft === null ? '--:--' : formatTime(timeLeft)}</b></div>{game?.difficulty && <span className="round-points">{game.difficulty} round</span>}</aside>
       <section className="board-area">

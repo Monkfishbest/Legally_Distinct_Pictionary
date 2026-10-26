@@ -130,27 +130,7 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
       }
 
   override def saveDrawing(gameId: String, operation: DrawingOperation): Either[GameError, Unit] =
-    attempt:
-      using(connection()) { connection =>
-        execute(connection,
-          """
-            |INSERT INTO drawing_operations
-            |(id, game_id, turn_number, player_id, operation_type, points_json, color, width, sequence)
-            |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            |ON CONFLICT (game_id, turn_number, sequence) DO NOTHING
-            |""".stripMargin
-        ) { statement =>
-          statement.setObject(1, UUID.fromString(operation.id))
-          statement.setString(2, gameId)
-          statement.setInt(3, operation.turnNumber)
-          statement.setObject(4, UUID.fromString(operation.playerId))
-          statement.setString(5, operation.operationType.toString)
-          statement.setString(6, Json.stringify(Json.toJson(operation.points.map(point => Json.obj("x" -> point.x, "y" -> point.y)))))
-          statement.setString(7, operation.color)
-          statement.setDouble(8, operation.width)
-          statement.setLong(9, operation.sequence)
-        }
-      }
+    Right(())
 
   override def loadRooms(): Either[GameError, Vector[Room]] =
     attempt:

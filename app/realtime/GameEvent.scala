@@ -87,6 +87,8 @@ object GameEvent:
         case GameError.InvalidSettings => "The game settings are invalid"
         case GameError.NoWordsAvailable(difficulty) => s"No words available for $difficulty"
         case GameError.InvalidWord(reason) => reason
+        case GameError.DuplicateWord => "That custom word already exists"
+        case GameError.DatabaseUnavailable => "The word database is temporarily unavailable"
         case GameError.InvalidRoomCode => "Room not found"
         case GameError.PlayerNameRequired => "Player name must be 1-30 characters"
         case GameError.RoomFull => "Room is full"

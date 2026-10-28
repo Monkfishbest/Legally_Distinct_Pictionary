@@ -18,11 +18,11 @@ describe('frontend API contract', () => {
   it('sends host settings when creating a room', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ code: 'ABC123' }), { status: 201 }))
 
-    await createRoom('Alex', { turnDurationSeconds: 45, turnsPerPlayer: 2 })
+    await createRoom('Alex', { turnDurationSeconds: 45, turnsPerPlayer: 2, reduceTimerEachTurn: true })
 
     expect(fetch).toHaveBeenCalledWith('/api/rooms', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ name: 'Alex', turnDurationSeconds: 45, turnsPerPlayer: 2 }),
+      body: JSON.stringify({ name: 'Alex', turnDurationSeconds: 45, turnsPerPlayer: 2, reduceTimerEachTurn: true }),
     }))
   })
 

@@ -15,6 +15,7 @@ enum GameError:
   case NoWordsAvailable(difficulty: WordDifficulty)
   case InvalidRoomCode
   case PlayerNameRequired
+  case DuplicatePlayerName
   case RoomFull
   case NotRoomOwner
   case NotArtist

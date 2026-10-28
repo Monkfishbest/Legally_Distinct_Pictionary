@@ -24,23 +24,21 @@ final class GameRulesSpec extends FunSuite:
 
     assertEquals(result, Left(GameError.NotEnoughPlayers))
 
-  test("difficulty affects confirmed player score"):
-    val simple = GameRules.confirmPlayer(
-      drawingState(WordDifficulty.Simple),
-      "player-2",
+  test("difficulty affects the shared round score"):
+    val simple = GameRules.endTurn(
+      GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 0).toOption.get,
       elapsedSeconds = 0
     ).toOption.get
-    val hard = GameRules.confirmPlayer(
-      drawingState(WordDifficulty.Hard),
-      "player-2",
+    val hard = GameRules.endTurn(
+      GameRules.confirmPlayer(drawingState(WordDifficulty.Hard), "player-2", elapsedSeconds = 0).toOption.get,
       elapsedSeconds = 0
     ).toOption.get
 
     assert(hard.players.find(_.id == "player-2").get.score > simple.players.find(_.id == "player-2").get.score)
 
   test("remaining time adds a larger bonus to earlier correct guesses"):
-    val early = GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 5).toOption.get
-    val late = GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 50).toOption.get
+    val early = GameRules.endTurn(GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 5).toOption.get, elapsedSeconds = 5).toOption.get
+    val late = GameRules.endTurn(GameRules.confirmPlayer(drawingState(WordDifficulty.Simple), "player-2", elapsedSeconds = 50).toOption.get, elapsedSeconds = 50).toOption.get
 
     assert(early.players.find(_.id == "player-2").get.score > late.players.find(_.id == "player-2").get.score)
 
@@ -53,9 +51,12 @@ final class GameRulesSpec extends FunSuite:
       Left(GameError.PlayerAlreadyConfirmed("player-2"))
     )
 
-  test("artist receives participation points when a player is confirmed"):
+  test("artist and guesser receive the same score"):
     val confirmed = GameRules.confirmPlayer(drawingState(), "player-2", elapsedSeconds = 10).toOption.get
-    val finished = GameRules.endTurn(confirmed).toOption.get
+    val finished = GameRules.endTurn(confirmed, elapsedSeconds = 10).toOption.get
 
     assertEquals(finished.phase, GamePhase.TurnComplete)
-    assertEquals(finished.players.find(_.id == "artist").get.score, 75)
+    assertEquals(
+      finished.players.find(_.id == "artist").get.score,
+      finished.players.find(_.id == "player-2").get.score
+    )

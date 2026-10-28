@@ -8,7 +8,12 @@ import services.RoomService
 
 import javax.inject.*
 
-final case class PlayerRequest(name: String, turnDurationSeconds: Option[Int] = None, turnsPerPlayer: Option[Int] = None)
+final case class PlayerRequest(
+    name: String,
+    turnDurationSeconds: Option[Int] = None,
+    turnsPerPlayer: Option[Int] = None,
+    reduceTimerEachTurn: Option[Boolean] = None
+)
 
 object PlayerRequest:
   given Reads[PlayerRequest] = Json.reads[PlayerRequest]
@@ -26,7 +31,8 @@ final class RoomController @Inject() (
       playerRequest =>
         val settings = GameSettings(
           playerRequest.turnDurationSeconds.getOrElse(GameSettings().turnDurationSeconds),
-          playerRequest.turnsPerPlayer.getOrElse(GameSettings().turnsPerPlayer)
+          playerRequest.turnsPerPlayer.getOrElse(GameSettings().turnsPerPlayer),
+          playerRequest.reduceTimerEachTurn.getOrElse(GameSettings().reduceTimerEachTurn)
         )
         roomService.create(playerRequest.name, settings) match
           case Right((room, player)) => Created(roomJson(room, Some(player.id)))
@@ -49,6 +55,7 @@ final class RoomController @Inject() (
             Ok(roomJson(room, Some(player.id)))
           case Left(GameError.InvalidRoomCode) => NotFound(Json.obj("error" -> "Room not found"))
           case Left(GameError.RoomFull) => Conflict(Json.obj("error" -> "Room is full"))
+          case Left(GameError.DuplicatePlayerName) => Conflict(Json.obj("error" -> "That name is already in use in this room"))
           case Left(GameError.PlayerNameRequired) => BadRequest(Json.obj("error" -> "Player name must be 1-30 characters"))
           case Left(_) => InternalServerError(Json.obj("error" -> "Could not join room"))
     )
@@ -62,6 +69,7 @@ final class RoomController @Inject() (
         Json.obj("id" -> player.id, "name" -> player.name, "score" -> player.score),
       "settings" -> Json.obj(
         "turnDurationSeconds" -> room.settings.turnDurationSeconds,
-        "turnsPerPlayer" -> room.settings.turnsPerPlayer
+        "turnsPerPlayer" -> room.settings.turnsPerPlayer,
+        "reduceTimerEachTurn" -> room.settings.reduceTimerEachTurn
       )
     )

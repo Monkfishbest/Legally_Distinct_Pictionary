@@ -1,0 +1,2 @@
+ALTER TABLE rooms
+    ADD COLUMN IF NOT EXISTS reduce_timer_each_turn BOOLEAN NOT NULL DEFAULT FALSE;

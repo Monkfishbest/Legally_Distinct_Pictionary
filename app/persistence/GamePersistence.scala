@@ -29,17 +29,19 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
         try
           execute(connection,
             """
-              |INSERT INTO rooms (code, owner_id, turn_duration_seconds, turns_per_player)
-              |VALUES (?, ?, ?, ?)
+              |INSERT INTO rooms (code, owner_id, turn_duration_seconds, turns_per_player, reduce_timer_each_turn)
+              |VALUES (?, ?, ?, ?, ?)
               |ON CONFLICT (code) DO UPDATE SET owner_id = EXCLUDED.owner_id,
               |turn_duration_seconds = EXCLUDED.turn_duration_seconds,
-              |turns_per_player = EXCLUDED.turns_per_player
+              |turns_per_player = EXCLUDED.turns_per_player,
+              |reduce_timer_each_turn = EXCLUDED.reduce_timer_each_turn
               |""".stripMargin
           ) { statement =>
             statement.setString(1, room.code)
             statement.setObject(2, UUID.fromString(room.ownerId))
             statement.setInt(3, room.settings.turnDurationSeconds)
             statement.setInt(4, room.settings.turnsPerPlayer)
+            statement.setBoolean(5, room.settings.reduceTimerEachTurn)
           }
           room.players.foreach: player =>
             execute(connection,
@@ -137,7 +139,7 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
       using(connection()) { connection =>
         using(connection.prepareStatement(
           """
-            |SELECT r.code, r.owner_id, r.turn_duration_seconds, r.turns_per_player,
+            |SELECT r.code, r.owner_id, r.turn_duration_seconds, r.turns_per_player, r.reduce_timer_each_turn,
             |p.id, p.name, p.score
             |FROM rooms r LEFT JOIN room_players p ON p.room_code = r.code
             |ORDER BY r.code, p.name
@@ -150,6 +152,7 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
                 row.getString("owner_id"),
                 row.getInt("turn_duration_seconds"),
                 row.getInt("turns_per_player"),
+                row.getBoolean("reduce_timer_each_turn"),
                 Option(row.getString("id")),
                 Option(row.getString("name")),
                 Option(row.getObject("score")).map(_.asInstanceOf[Integer].intValue()).getOrElse(0)
@@ -161,10 +164,10 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
                 first._2,
                 roomRows.flatMap: row =>
                   for
-                    id <- row._5
-                    name <- row._6
-                  yield Player(id, name, row._7),
-                GameSettings(first._3, first._4)
+                    id <- row._6
+                    name <- row._7
+                  yield Player(id, name, row._8),
+                GameSettings(first._3, first._4, first._5)
               )
             .toVector
           }
@@ -178,7 +181,7 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
           """
             |SELECT g.id, g.phase, g.artist_index, g.turn_number, g.difficulty,
             |g.selected_word_id, p.id AS player_id, p.name, p.score, r.turn_duration_seconds,
-            |r.turns_per_player
+            |r.turns_per_player, r.reduce_timer_each_turn
             |FROM games g
             |JOIN rooms r ON r.code = g.room_code
             |LEFT JOIN room_players p ON p.room_code = r.code
@@ -198,7 +201,8 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
                 Option(row.getString("name")),
                 Option(row.getObject("score")).map(_.asInstanceOf[Integer].intValue()).getOrElse(0),
                 row.getInt("turn_duration_seconds"),
-                row.getInt("turns_per_player")
+                row.getInt("turns_per_player"),
+                row.getBoolean("reduce_timer_each_turn")
               )
             rows.toVector.groupBy(_._1).values.map: gameRows =>
               val first = gameRows.head
@@ -209,7 +213,7 @@ final class JdbcGamePersistence @Inject() (configuration: Configuration) extends
                     id <- row._7
                     name <- row._8
                   yield Player(id, name, row._9),
-                GameSettings(first._10, first._11),
+                GameSettings(first._10, first._11, first._12),
                 first._2,
                 first._3,
                 first._4,

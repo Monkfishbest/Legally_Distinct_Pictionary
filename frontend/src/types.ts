@@ -13,7 +13,7 @@ export interface Room {
   connectedPlayerIds?: string[]
   currentPlayerId: string | null
   players: Player[]
-  settings: { turnDurationSeconds: number; turnsPerPlayer: number }
+  settings: { turnDurationSeconds: number; turnsPerPlayer: number; reduceTimerEachTurn: boolean }
 }
 
 export interface GameState {
@@ -68,6 +68,7 @@ export type ServerEvent =
   | { type: 'turn.word_assigned'; word: string; difficulty: Difficulty }
   | { type: 'turn.countdown'; seconds: number }
   | { type: 'turn.timer'; deadlineEpochMs: number }
+  | { type: 'time.pong'; clientSentAt: number; serverEpochMs: number }
   | { type: 'turn.timeout' }
   | { type: 'turn.word_options'; options: WordOption[] }
   | { type: 'turn.reveal'; word: string; difficulty: Difficulty; correct: boolean }

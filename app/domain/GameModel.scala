@@ -40,8 +40,14 @@ final case class Room(
 
 final case class GameSettings(
     turnDurationSeconds: Int = 60,
-    turnsPerPlayer: Int = 1
-)
+    turnsPerPlayer: Int = 1,
+    reduceTimerEachTurn: Boolean = false
+):
+  val minimumTurnDurationSeconds: Int = 10
+
+  def durationForTurn(turnNumber: Int): Int =
+    val reduction = if reduceTimerEachTurn then (turnNumber.max(1) - 1) * 10 else 0
+    (turnDurationSeconds - reduction).max(minimumTurnDurationSeconds)
 
 final case class GameState(
     id: String,

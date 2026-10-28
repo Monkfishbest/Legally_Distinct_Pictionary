@@ -35,7 +35,7 @@ final class RoomService @Inject() (
 
   def create(playerName: String, settings: GameSettings = GameSettings()): Either[GameError, (Room, Player)] =
     validPlayerName(playerName).flatMap { name =>
-      if settings.turnDurationSeconds <= 0 || settings.turnsPerPlayer <= 0 then Left(GameError.InvalidSettings)
+      if settings.turnDurationSeconds < settings.minimumTurnDurationSeconds || settings.turnsPerPlayer <= 0 then Left(GameError.InvalidSettings)
       else
         val player = Player(UUID.randomUUID().toString, name)
         val room = Room(generateCode(), player.id, Vector(player), settings)
@@ -46,18 +46,24 @@ final class RoomService @Inject() (
     }
 
   def join(code: String, playerName: String): Either[GameError, (Room, Player)] =
-    validPlayerName(playerName).flatMap { name =>
-      rooms.get(code.trim.toUpperCase).toRight(GameError.InvalidRoomCode).flatMap { room =>
-        Either.cond(room.players.size < maxPlayers, (), GameError.RoomFull).flatMap { _ =>
-          val player = Player(UUID.randomUUID().toString, name)
-          val updated = room.copy(players = room.players :+ player)
-          gamePersistence.saveRoom(updated).map { _ =>
-            rooms.put(room.code, updated)
-            (updated, player)
+    this.synchronized:
+      validPlayerName(playerName).flatMap { name =>
+        rooms.get(code.trim.toUpperCase).toRight(GameError.InvalidRoomCode).flatMap { room =>
+          Either.cond(room.players.size < maxPlayers, (), GameError.RoomFull)
+            .flatMap(_ => Either.cond(
+              !room.players.exists(_.name.equalsIgnoreCase(name)),
+              (),
+              GameError.DuplicatePlayerName
+            )).flatMap { _ =>
+            val player = Player(UUID.randomUUID().toString, name)
+            val updated = room.copy(players = room.players :+ player)
+            gamePersistence.saveRoom(updated).map { _ =>
+              rooms.put(room.code, updated)
+              (updated, player)
+            }
           }
         }
       }
-    }
 
   def find(code: String): Option[Room] = rooms.get(code.trim.toUpperCase)
 
@@ -200,14 +206,24 @@ final class RoomService @Inject() (
         ensureArtist(state, command.playerId).flatMap:
           _ => GameRules.confirmPlayer(state, targetPlayerId, elapsedSeconds.max(0))
 
-      case realtime.EndTurn(_) =>
-        ensureArtist(state, command.playerId).flatMap(_ => GameRules.endTurn(state))
+      case realtime.EndTurn(_, elapsedSeconds) =>
+        ensureArtist(state, command.playerId).flatMap(_ => GameRules.endTurn(state, elapsedSeconds.max(0)))
 
       case realtime.NextTurn(_) =>
         ensureArtist(state, command.playerId).flatMap(_ => GameRules.nextTurn(state))
 
+      case realtime.Rematch(_) =>
+        if command.playerId != room.ownerId then Left(GameError.NotRoomOwner)
+        else GameRules.rematch(state)
+
+      case _: realtime.TimePing =>
+        Left(GameError.InvalidCommand("Time pings must use the realtime handler"))
+
       case _: realtime.DrawingOperationCommand | _: realtime.DrawingSnapshotRequest =>
         Left(GameError.InvalidCommand("Drawing commands must use the drawing command handler"))
+
+      case _ =>
+        Left(GameError.InvalidCommand("Unsupported game command"))
 
   private def ensureArtist(state: GameState, playerId: String): Either[GameError, Unit] =
     Either.cond(state.artist.exists(_.id == playerId), (), GameError.NotArtist)
@@ -218,10 +234,14 @@ final class RoomService @Inject() (
       command: realtime.GameCommand
   ): Either[GameError, Unit] =
     command match
-      case realtime.ConfirmPlayer(_, playerId, _) =>
-        val beforeScore = before.players.find(_.id == playerId).map(_.score).getOrElse(0)
-        val afterScore = after.players.find(_.id == playerId).map(_.score).getOrElse(beforeScore)
-        gamePersistence.saveConfirmation(after.id, after.turnNumber, playerId, afterScore - beforeScore)
+      case realtime.EndTurn(_, _) =>
+        after.confirmedPlayerIds.foldLeft(Right(()): Either[GameError, Unit]) { (result, playerId) =>
+          result.flatMap { _ =>
+            val beforeScore = before.players.find(_.id == playerId).map(_.score).getOrElse(0)
+            val afterScore = after.players.find(_.id == playerId).map(_.score).getOrElse(beforeScore)
+            gamePersistence.saveConfirmation(after.id, after.turnNumber, playerId, afterScore - beforeScore)
+          }
+        }
       case _ => Right(())
 
   private def parseOperationType(value: String): Either[GameError, DrawingOperationType] =

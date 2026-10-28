@@ -8,6 +8,19 @@ final class TurnRulesSpec extends FunSuite:
     Player("player-2", "Player 2")
   )
 
+  test("reduces each turn by ten seconds when enabled, with a ten second floor"):
+    val settings = GameSettings(turnDurationSeconds = 30, reduceTimerEachTurn = true)
+
+    assertEquals(settings.durationForTurn(1), 30)
+    assertEquals(settings.durationForTurn(2), 20)
+    assertEquals(settings.durationForTurn(3), 10)
+    assertEquals(settings.durationForTurn(5), 10)
+
+  test("keeps the configured duration when timer reduction is disabled"):
+    val settings = GameSettings(turnDurationSeconds = 30)
+
+    assertEquals(settings.durationForTurn(4), 30)
+
   test("rotates the artist and returns to word selection"):
     val state = GameState(
       "game-1",

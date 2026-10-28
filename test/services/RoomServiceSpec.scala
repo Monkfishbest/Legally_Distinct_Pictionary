@@ -22,3 +22,9 @@ final class RoomServiceSpec extends FunSuite:
 
   test("rejects blank player names"):
     assertEquals(RoomService().create("   "), Left(GameError.PlayerNameRequired))
+
+  test("rejects duplicate player names within a room"):
+    val service = RoomService()
+    val (room, _) = service.create("Alice").toOption.get
+
+    assertEquals(service.join(room.code, "alice"), Left(GameError.DuplicatePlayerName))

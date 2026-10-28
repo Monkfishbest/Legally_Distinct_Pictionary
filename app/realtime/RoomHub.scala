@@ -101,27 +101,46 @@ final class RoomHub @Inject() (
                       (1 to 4).foreach: second =>
                         countdownScheduler.schedule(
                           new Runnable:
-                            def run(): Unit = broadcast(roomCode, GameEvent.countdown(5 - second))
+                            def run(): Unit =
+                              val stillCountingDown = roomService.currentState(roomCode).exists(currentState =>
+                                currentState.phase == GamePhase.Countdown && currentState.turnNumber == state.turnNumber
+                              )
+                              if stillCountingDown then broadcast(roomCode, GameEvent.countdown(5 - second))
                           , second, TimeUnit.SECONDS
                         )
                       countdownScheduler.schedule(
                         new Runnable:
                           def run(): Unit =
-                            roomService.beginDrawing(roomCode).foreach: updated =>
-                              val deadline = System.currentTimeMillis() + updated.settings.turnDurationSeconds.toLong * 1000L
+                            // A countdown is asynchronous.  It may outlive the turn that
+                            // created it (for example when a client ends/rematches quickly),
+                            // so it must never advance whatever phase happens to be current.
+                            val current = roomService.currentState(roomCode)
+                            if current.exists(currentState =>
+                              currentState.phase == GamePhase.Countdown && currentState.turnNumber == state.turnNumber
+                            ) then roomService.beginDrawing(roomCode).foreach: updated =>
+                              val turnDuration = updated.settings.durationForTurn(updated.turnNumber)
+                              val deadline = System.currentTimeMillis() + turnDuration.toLong * 1000L
                               turnDeadlines.put(roomCode.trim.toUpperCase, deadline)
                               broadcast(roomCode, GameEvent.state(updated))
                               broadcast(roomCode, GameEvent.timer(deadline))
                               countdownScheduler.schedule(
                                 new Runnable:
                                   def run(): Unit =
-                                    broadcast(roomCode, GameEvent.timeout)
-                                    countdownScheduler.schedule(
-                                      new Runnable:
-                                        def run(): Unit = endTimedOutTurn(roomCode, updated.artist.map(_.id).getOrElse(""))
-                                      , 5, TimeUnit.SECONDS
+                                    val stillDrawing = roomService.currentState(roomCode).exists(state =>
+                                      state.phase == GamePhase.Drawing && state.turnNumber == updated.turnNumber
                                     )
-                                , updated.settings.turnDurationSeconds.toLong, TimeUnit.SECONDS
+                                    if stillDrawing then
+                                      broadcast(roomCode, GameEvent.timeout)
+                                      countdownScheduler.schedule(
+                                        new Runnable:
+                                          def run(): Unit = endTimedOutTurn(
+                                            roomCode,
+                                            updated.artist.map(_.id).getOrElse(""),
+                                            updated.turnNumber
+                                          )
+                                        , 5, TimeUnit.SECONDS
+                                      )
+                            , updated.settings.durationForTurn(updated.turnNumber).toLong, TimeUnit.SECONDS
                               )
                         , 5, TimeUnit.SECONDS
                       )
@@ -133,10 +152,11 @@ final class RoomHub @Inject() (
             }.andThen { case _ => selectionInFlight.remove(normalizedRoomCode) }
 
           case drawing: DrawingOperationCommand =>
-            if turnHasExpired(roomCode) then broadcast(roomCode, GameEvent.error(GameError.DrawingNotAllowed))
-            else roomService.applyDrawing(roomCode, drawing) match
-              case Left(error) => broadcast(roomCode, GameEvent.error(error))
-              case Right(operation) => broadcast(roomCode, GameEvent.drawingOperation(operation))
+            if turnHasExpired(roomCode) then ()
+            else roomService.applyDrawing(roomCode, drawing).foreach(operation => broadcast(roomCode, GameEvent.drawingOperation(operation)))
+
+          case TimePing(_, clientSentAt) =>
+            sendToPlayer(roomCode, playerId, GameEvent.timePong(clientSentAt))
 
           case _: DrawingSnapshotRequest =>
             roomService.drawingSnapshot(roomCode) match
@@ -144,16 +164,25 @@ final class RoomHub @Inject() (
               case Right(operations) => sendToPlayer(roomCode, playerId, GameEvent.drawingSnapshot(operations))
 
           case _ =>
+            val commandForExecution = authenticatedCommand match
+              case ConfirmPlayer(_, targetPlayerId, _) =>
+                ConfirmPlayer(playerId, targetPlayerId, elapsedSeconds(roomCode))
+              case EndTurn(_, _) =>
+                EndTurn(playerId, elapsedSeconds(roomCode))
+              case other => other
             val canStart = authenticatedCommand match
               case _: StartGame => roomService.find(roomCode).exists(room => room.players.forall(player => connectedPlayerIds(roomCode).contains(player.id)))
               case _ => true
             if !canStart then broadcast(roomCode, GameEvent.error(GameError.PlayersNotConnected))
-            else if authenticatedCommand.isInstanceOf[EndTurn] && !canEndTurn(roomCode) then
-              broadcast(roomCode, GameEvent.error(GameError.InvalidCommand("The artist must keep drawing until time runs out or someone guesses")))
-            else roomService.execute(roomCode, authenticatedCommand) match
+            else roomService.execute(roomCode, commandForExecution) match
               case Left(error) => broadcast(roomCode, GameEvent.error(error))
               case Right(state) =>
                 broadcast(roomCode, GameEvent.state(state))
+                if state.phase == GamePhase.Lobby then
+                  turnDeadlines.remove(roomCode.trim.toUpperCase)
+                  selectedWords.remove(roomCode)
+                  selectedWordIds.remove(roomCode)
+                  roomService.find(roomCode).foreach(broadcastRoom)
                 if state.phase == GamePhase.WordSelection && state.turnNumber == 1 then
                   selectedWordIds.remove(roomCode)
                 if state.phase == GamePhase.WordSelection then
@@ -163,11 +192,16 @@ final class RoomHub @Inject() (
                   selectedWords.get(roomCode).foreach(word => broadcast(roomCode, GameEvent.turnReveal(word, state.confirmedPlayerIds.nonEmpty)))
                   countdownScheduler.schedule(
                     new Runnable:
-                      def run(): Unit = roomService.execute(roomCode, NextTurn(state.artist.map(_.id).getOrElse(""))) match
-                        case Right(nextState) =>
-                          broadcast(roomCode, GameEvent.state(nextState))
-                          if nextState.phase == GamePhase.WordSelection then sendWordOptions(roomCode, nextState.artist.map(_.id))
-                        case Left(_) => ()
+                      def run(): Unit =
+                        val stillComplete = roomService.currentState(roomCode).exists(current =>
+                          current.phase == GamePhase.TurnComplete && current.turnNumber == state.turnNumber
+                        )
+                        if stillComplete then
+                          roomService.execute(roomCode, NextTurn(state.artist.map(_.id).getOrElse(""))) match
+                            case Right(nextState) =>
+                              broadcast(roomCode, GameEvent.state(nextState))
+                              if nextState.phase == GamePhase.WordSelection then sendWordOptions(roomCode, nextState.artist.map(_.id))
+                            case Left(_) => ()
                     , 5, TimeUnit.SECONDS
                   )
 
@@ -184,17 +218,35 @@ final class RoomHub @Inject() (
   private def turnHasExpired(roomCode: String): Boolean =
     turnDeadlines.get(roomCode.trim.toUpperCase).exists(_ <= System.currentTimeMillis())
 
-  private def endTimedOutTurn(roomCode: String, artistId: String): Unit =
-    roomService.execute(roomCode, EndTurn(artistId)) match
+  private def elapsedSeconds(roomCode: String): Int =
+    val normalizedRoomCode = roomCode.trim.toUpperCase
+    val duration = roomService.currentState(normalizedRoomCode)
+      .map(state => state.settings.durationForTurn(state.turnNumber))
+      .orElse(roomService.find(normalizedRoomCode).map(_.settings.durationForTurn(1)))
+      .getOrElse(0)
+    val deadline = turnDeadlines.getOrElse(normalizedRoomCode, System.currentTimeMillis())
+    (duration - math.ceil((deadline - System.currentTimeMillis()).max(0).toDouble / 1000.0).toInt).max(0)
+
+  private def endTimedOutTurn(roomCode: String, artistId: String, turnNumber: Int): Unit =
+    val stillDrawing = roomService.currentState(roomCode).exists(state =>
+      state.phase == GamePhase.Drawing && state.turnNumber == turnNumber && state.artist.exists(_.id == artistId)
+    )
+    if !stillDrawing then return
+    val duration = roomService.currentState(roomCode).map(state => state.settings.durationForTurn(state.turnNumber)).getOrElse(0)
+    roomService.execute(roomCode, EndTurn(artistId, duration)) match
       case Right(state) =>
         turnDeadlines.remove(roomCode.trim.toUpperCase)
         broadcast(roomCode, GameEvent.state(state))
         selectedWords.get(roomCode).foreach(word => broadcast(roomCode, GameEvent.turnReveal(word, correct = false)))
         countdownScheduler.schedule(
           new Runnable:
-            def run(): Unit = roomService.execute(roomCode, NextTurn(artistId)).foreach: nextState =>
-              broadcast(roomCode, GameEvent.state(nextState))
-              if nextState.phase == GamePhase.WordSelection then sendWordOptions(roomCode, nextState.artist.map(_.id))
+            def run(): Unit =
+              val stillComplete = roomService.currentState(roomCode).exists(state =>
+                state.phase == GamePhase.TurnComplete && state.turnNumber == turnNumber
+              )
+              if stillComplete then roomService.execute(roomCode, NextTurn(artistId)).foreach: nextState =>
+                broadcast(roomCode, GameEvent.state(nextState))
+                if nextState.phase == GamePhase.WordSelection then sendWordOptions(roomCode, nextState.artist.map(_.id))
           , 5, TimeUnit.SECONDS
         )
       case Left(_) => ()

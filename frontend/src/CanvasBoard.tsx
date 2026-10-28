@@ -45,26 +45,11 @@ export function CanvasBoard({ operations, canDraw, color, width, onOperation, on
   useEffect(() => {
     const context = canvas.current?.getContext('2d')
     if (!context) return
-    const latestSequence = operations.reduce((latest, operation) => Math.max(latest, operation.sequence), 0)
-    if (latestSequence < renderedSequence.current) {
-      redrawAll(context, operations)
-      return
-    }
-    if (pendingAcknowledgement.current !== null) {
-      if (latestSequence >= pendingAcknowledgement.current) {
-        pendingAcknowledgement.current = null
-        draftRef.current = []
-        redrawAll(context, operations)
-      }
-      return
-    }
-    const newOperations = operations.filter(operation => operation.sequence > renderedSequence.current)
-    if (newOperations.some(operation => operation.operationType !== 'Stroke')) {
-      redrawAll(context, operations)
-      return
-    }
-    for (const operation of newOperations) applyOperation(context, operation)
-    renderedSequence.current = Math.max(renderedSequence.current, latestSequence)
+    // Replaying the authoritative operation list keeps Clear, Undo, and Fill
+    // consistent even when they arrive while a local stroke is awaiting ack.
+    redrawAll(context, operations)
+    pendingAcknowledgement.current = null
+    draftRef.current = []
   }, [operations])
 
   useEffect(() => {

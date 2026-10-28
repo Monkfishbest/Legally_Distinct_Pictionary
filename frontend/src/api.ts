@@ -9,7 +9,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return body as T
 }
 
-export const createRoom = (name: string, settings?: { turnDurationSeconds: number; turnsPerPlayer: number }) =>
+export const createRoom = (name: string, settings?: { turnDurationSeconds: number; turnsPerPlayer: number; reduceTimerEachTurn: boolean }) =>
   request<Room>('/api/rooms', { method: 'POST', body: JSON.stringify({ name, ...settings }) })
 
 export const createCustomWord = (text: string, difficulty: string) =>

@@ -15,7 +15,8 @@ object GameEvent:
           Json.obj("id" -> player.id, "name" -> player.name, "score" -> player.score),
         "settings" -> Json.obj(
           "turnDurationSeconds" -> room.settings.turnDurationSeconds,
-          "turnsPerPlayer" -> room.settings.turnsPerPlayer
+          "turnsPerPlayer" -> room.settings.turnsPerPlayer,
+          "reduceTimerEachTurn" -> room.settings.reduceTimerEachTurn
         )
       )
     ).toString
@@ -44,6 +45,9 @@ object GameEvent:
 
   def timer(deadlineEpochMs: Long): String =
     Json.obj("type" -> "turn.timer", "deadlineEpochMs" -> deadlineEpochMs).toString
+
+  def timePong(clientSentAt: Long): String =
+    Json.obj("type" -> "time.pong", "clientSentAt" -> clientSentAt, "serverEpochMs" -> System.currentTimeMillis()).toString
 
   def timeout: String =
     Json.obj("type" -> "turn.timeout").toString
@@ -102,6 +106,7 @@ object GameEvent:
         case GameError.DatabaseUnavailable => "The word database is temporarily unavailable"
         case GameError.InvalidRoomCode => "Room not found"
         case GameError.PlayerNameRequired => "Player name must be 1-30 characters"
+        case GameError.DuplicatePlayerName => "That name is already in use in this room"
         case GameError.RoomFull => "Room is full"
         case GameError.DrawingNotAllowed => "Drawing is not allowed right now"
         case GameError.InvalidDrawingOperation(reason) => reason

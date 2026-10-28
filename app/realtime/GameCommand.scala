@@ -13,17 +13,20 @@ sealed trait GameCommand:
     case ChooseDifficulty(_, difficulty, wordId) => ChooseDifficulty(authenticatedPlayerId, difficulty, wordId)
     case ConfirmPlayer(_, targetPlayerId, elapsedSeconds) =>
       ConfirmPlayer(authenticatedPlayerId, targetPlayerId, elapsedSeconds)
-    case EndTurn(_) => EndTurn(authenticatedPlayerId)
+    case EndTurn(_, _) => EndTurn(authenticatedPlayerId)
     case NextTurn(_) => NextTurn(authenticatedPlayerId)
+    case Rematch(_) => Rematch(authenticatedPlayerId)
     case DrawingOperationCommand(_, operationType, points, color, width) =>
       DrawingOperationCommand(authenticatedPlayerId, operationType, points, color, width)
     case DrawingSnapshotRequest(_) => DrawingSnapshotRequest(authenticatedPlayerId)
+    case TimePing(_, clientSentAt) => TimePing(authenticatedPlayerId, clientSentAt)
 
 final case class StartGame(playerId: String) extends GameCommand
 final case class ChooseDifficulty(playerId: String, difficulty: WordDifficulty, wordId: Option[String] = None) extends GameCommand
 final case class ConfirmPlayer(playerId: String, targetPlayerId: String, elapsedSeconds: Int) extends GameCommand
-final case class EndTurn(playerId: String) extends GameCommand
+final case class EndTurn(playerId: String, elapsedSeconds: Int = 0) extends GameCommand
 final case class NextTurn(playerId: String) extends GameCommand
+final case class Rematch(playerId: String) extends GameCommand
 final case class DrawingOperationCommand(
     playerId: String,
     operationType: String,
@@ -32,6 +35,7 @@ final case class DrawingOperationCommand(
     width: Double
 ) extends GameCommand
 final case class DrawingSnapshotRequest(playerId: String) extends GameCommand
+final case class TimePing(playerId: String, clientSentAt: Long) extends GameCommand
 
 object GameCommand:
   private final case class PlayerPayload(playerId: String)
@@ -44,12 +48,14 @@ object GameCommand:
       color: String,
       width: Double
   )
+  private final case class TimePingPayload(playerId: String, clientSentAt: Long)
 
   private given Reads[PlayerPayload] = Json.reads[PlayerPayload]
   private given Reads[DifficultyPayload] = Json.reads[DifficultyPayload]
   private given Reads[ConfirmPayload] = Json.reads[ConfirmPayload]
   private given Reads[DrawPoint] = Json.reads[DrawPoint]
   private given Reads[DrawingPayload] = Json.reads[DrawingPayload]
+  private given Reads[TimePingPayload] = Json.reads[TimePingPayload]
 
   def parse(message: String): Either[GameError, GameCommand] =
     try
@@ -74,10 +80,18 @@ object GameCommand:
             payload.validate[PlayerPayload].asEither
               .left.map(_ => GameError.InvalidCommand("Invalid turn.end payload"))
               .map(value => EndTurn(value.playerId))
+          case Some("time.ping") =>
+            payload.validate[TimePingPayload].asEither
+              .left.map(_ => GameError.InvalidCommand("Invalid time.ping payload"))
+              .map(value => TimePing(value.playerId, value.clientSentAt))
           case Some("turn.next") =>
             payload.validate[PlayerPayload].asEither
               .left.map(_ => GameError.InvalidCommand("Invalid turn.next payload"))
               .map(value => NextTurn(value.playerId))
+          case Some("game.rematch") =>
+            payload.validate[PlayerPayload].asEither
+              .left.map(_ => GameError.InvalidCommand("Invalid game.rematch payload"))
+              .map(value => Rematch(value.playerId))
           case Some("drawing.operation") =>
             payload.validate[DrawingPayload].asEither
               .left.map(_ => GameError.InvalidCommand("Invalid drawing.operation payload"))

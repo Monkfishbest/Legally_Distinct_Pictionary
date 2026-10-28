@@ -129,7 +129,7 @@ describe('useGameSocket', () => {
     const replacement = MockWebSocket.instances[1]
     act(() => replacement.open())
 
-    expect(replacement.sent).toHaveLength(1)
-    expect(JSON.parse(replacement.sent[0]).type).toBe('turn.confirm_player')
+    expect(replacement.sent).toHaveLength(2)
+    expect(replacement.sent.map(message => JSON.parse(message).type)).toEqual(['time.ping', 'turn.confirm_player'])
   })
 })

@@ -34,16 +34,16 @@ describe('turn controls', () => {
     expect(screen.getByRole('button', { name: 'Sam' })).toBeInTheDocument()
   })
 
-  it('does not offer an early end-turn button', () => {
+  it('offers a no-score reveal option', () => {
     render(<TurnActions isArtist showSelection forceSelection={false} players={players} confirmed={[]} artistId="artist" onOpenSelection={() => undefined} onCancel={() => undefined} onConfirm={() => undefined} />)
-    expect(screen.getByRole('button', { name: /Whoops.*no one guessed it/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /No one scores.*reveal word/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /End turn/i })).not.toBeInTheDocument()
   })
 
   it('allows cancelling a mistaken guess report', () => {
     const onCancel = vi.fn()
     render(<TurnActions isArtist showSelection forceSelection={false} players={players} confirmed={[]} artistId="artist" onCancel={onCancel} onConfirm={() => undefined} />)
-    fireEvent.click(screen.getByRole('button', { name: /Whoops.*no one guessed it/i }))
+    fireEvent.click(screen.getByRole('button', { name: /No one scores.*reveal word/i }))
     expect(onCancel).toHaveBeenCalledOnce()
   })
 
